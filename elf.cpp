@@ -25,12 +25,18 @@ public:
 private:
     static std::mutex consoleMutex;
 
-    std::string toLower(const std::string& s) {
-        std::string result;
-        std::transform(s.begin(), s.end(), std::back_inserter(result),
-                       [](unsigned char c) { return std::tolower(c); });
-        return result;
-    }
+/**
+ * @brief Convert a string to lowercase.
+ * 
+ * @param s The string to convert.
+ * @return std::string The lowercase version of the input string.
+ */
+std::string toLower(const std::string& s) {
+    std::string result;
+    std::transform(s.begin(), s.end(), std::back_inserter(result),
+        [](unsigned char c) { return std::tolower(c); });
+    return result;
+}
 
     std::string identifyRequestType(const std::string& prompt) {
         std::string promptLower = toLower(prompt);
