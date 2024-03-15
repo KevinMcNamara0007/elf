@@ -1,7 +1,10 @@
-to install on OS X 
-git clone 
-then 
-g++ -std=c++11 -pthread elf.cpp -o elf
-then copy elf to the bin folder of the llama.cpp /build/bin directory
-example use
-./elf "{prompt}"
+## To Install
+#### Linux
+Using conda:
+1. conda create -n <virtual env name>
+2. conda activate <virtual env name>
+3. pip install -r requirements.txt
+4. download gguf files of models you want to use and place them in efs/models under root folder
+
+## To Start
+uvicorn src.asgi:elf --reload --host=127.0.0.1 --port==8080
