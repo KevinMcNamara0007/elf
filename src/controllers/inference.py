@@ -1,6 +1,6 @@
-from fastapi import APIRouter, status, Form
-
-from src.services.inference import get_all_models, get_expert_response
+import json
+from fastapi import APIRouter, status, Form, HTTPException
+from src.services.inference import get_all_models, get_expert_response, prompt_classification
 
 inference_router = APIRouter(
     prefix="/Inference",
@@ -23,7 +23,31 @@ async def fetch_all_models():
 
 @inference_router.post("/ask_an_expert", status_code=status.HTTP_200_OK, description="Ask any question.")
 async def ask_an_expert(
-        prompt: str = Form(description="Prompt you seek an answer to."),
+        messages: str = Form(
+            default=None,
+            description="Chat style prompting",
+            example=[{"role": "user", "content": "your prompt"}]
+        ),
+        prompt: str = Form(default=None, description="The prompt you want answered."),
         temperature: float = Form(default=.05, description="Temperature of the model.")
 ):
-    return await get_expert_response(prompt=prompt, temperature=temperature)
+    if messages and prompt:
+        history = json.loads(messages)
+        history.append({"role": "user", "content": prompt})
+    elif messages:
+        history = json.loads(messages)
+    elif prompt:
+        history = [{"role": "user", "content": prompt}]
+    else:
+        raise HTTPException(status_code=400, detail="Provide Messages, Prompt or both.")
+    return await get_expert_response(
+        messages= history if type(messages) is not list else messages,
+        temperature=temperature
+    )
+
+
+@inference_router.post("/classify", status_code=status.HTTP_200_OK, description="Classify your prompt.")
+async def determine_expert(
+        prompt: str = Form()
+):
+    return await prompt_classification(prompt)

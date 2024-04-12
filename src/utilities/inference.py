@@ -1,53 +1,36 @@
 from fastapi import HTTPException
-from src.utilities.general import expert_models
+from src.utilities.general import classifier, tokenizer, classifications
+from tensorflow.keras.preprocessing.sequence import pad_sequences
 
 
-async def load_model(category):
+async def load_model(key):
+    return classifications.get(key)["Model"]
+
+
+async def classify_prompt(prompt, c_tokenizer=tokenizer, c_model=classifier, max_len=100):
     try:
-        return expert_models.get(category)
+        # Tokenize the prompt
+        seq = c_tokenizer.texts_to_sequences([prompt])
+        # Pad the sequence
+        padded = pad_sequences(seq, maxlen=max_len, padding='post')
+        # Predict the category
+        prediction = c_model.predict(padded)[0]
+        # Convert predictions to binary
+        binary_prediction = [0 if x < .49 else 1 for x in prediction]
+        # Check for ambiguity and go with safe model if found
+        if binary_prediction.count(1) > 1 or binary_prediction.count(1) < 1:
+            return 1
+        # Return index of max value in the list of predictions
+        return binary_prediction.index(max(binary_prediction))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Could not load model: {exc}")
+        raise HTTPException(status_code=500, detail=exc)
 
 
-async def categorize(prompt):
+async def fetch_expert_response(messages, temperature, key):
     try:
-        expert = await load_model("General")
-        classification = expert.create_chat_completion(
-            messages=[
-                {
-                    "role": "assistant",
-                    "content": f"You are a classification expert. "
-                               f"Respond with the category label."
-                               f"DO NOT ANSWER THE PROMPT."
-                               f"DO NOT EXPLAIN."
-                               f"Classify the following prompt into one of the following knowledge categories: "
-                               f"{list(expert_models.keys())}."
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            temperature=.05
-        )["choices"][0]["message"]["content"]
-        for category in expert_models.keys():
-            if category in classification:
-                return category
-        return "General"
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Coult not categorize prompt: {exc}")
-
-
-async def fetch_expert_response(prompt, temperature, category):
-    try:
-        expert = await load_model(category)
+        expert = await load_model(key)
         return expert.create_chat_completion(
-            messages=[
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
+            messages=messages,
             temperature=temperature
         )
     except Exception as exc:
