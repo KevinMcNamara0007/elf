@@ -1,7 +1,0 @@
-fastapi
-python-multipart
-starlette
-uvicorn
-pillow
-pytesseract
-python-dotenv

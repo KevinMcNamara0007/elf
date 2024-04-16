@@ -1,0 +1,12 @@
+fastapi
+python-multipart
+starlette
+uvicorn
+pillow
+pytesseract
+python-dotenv
+scikit-learn
+tensorflow==2.15.0
+keras==2.15.0
+numpy
+llama-cpp-python
