@@ -1,5 +1,5 @@
 from fastapi import HTTPException
-from src.utilities.general import classifier, tokenizer, classifications
+from src.utilities.general import classifier, tokenizer, classifications, pipe
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 
 
@@ -37,3 +37,10 @@ async def fetch_expert_response(messages, temperature, key):
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Could not fetch response from model: {exc}")
+
+
+async def audio_transcription(path_to_wav="efs/preamble10.wav"):
+    try:
+        return pipe(path_to_wav)["text"]
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Could not fetch response from transcriber: {exc}")

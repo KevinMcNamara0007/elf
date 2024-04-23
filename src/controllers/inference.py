@@ -1,6 +1,7 @@
 import json
 from fastapi import APIRouter, status, Form, HTTPException
 from src.services.inference import get_all_models, get_expert_response, prompt_classification
+from src.utilities.inference import audio_transcription
 
 inference_router = APIRouter(
     prefix="/Inference",
@@ -41,7 +42,7 @@ async def ask_an_expert(
     else:
         raise HTTPException(status_code=400, detail="Provide Messages, Prompt or both.")
     return await get_expert_response(
-        messages= history if type(messages) is not list else messages,
+        messages=history if type(messages) is not list else messages,
         temperature=temperature
     )
 
@@ -51,3 +52,8 @@ async def determine_expert(
         prompt: str = Form()
 ):
     return await prompt_classification(prompt)
+
+
+@inference_router.post("/transcribe", description="Get transcription for audio file.")
+async def generate_transcription():
+    return await audio_transcription()

@@ -1,11 +1,12 @@
 import logging
 
-from src.utilities.general import classifications
+from src.utilities.general import classifications, pipe
 from src.utilities.inference import fetch_expert_response, classify_prompt
 
 
 async def get_all_models():
-    return [f"{classification['Category']} expert -> {classification['Model'].metadata['general.name']}" for classification
+    return [f"{classification['Category']} expert -> {classification['Model'].metadata['general.name']}" for
+            classification
             in classifications.values()]
 
 
@@ -16,3 +17,4 @@ async def get_expert_response(messages, temperature=.05):
 
 async def prompt_classification(prompt):
     return await classify_prompt(prompt)
+
