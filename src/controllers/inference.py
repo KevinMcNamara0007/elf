@@ -1,5 +1,5 @@
 import json
-from fastapi import APIRouter, status, Form, HTTPException
+from fastapi import APIRouter, status, Form, HTTPException, UploadFile, File
 from src.services.inference import get_all_models, get_expert_response, prompt_classification
 from src.utilities.inference import audio_transcription
 
@@ -55,5 +55,8 @@ async def determine_expert(
 
 
 @inference_router.post("/transcribe", description="Get transcription for audio file.")
-async def generate_transcription():
-    return await audio_transcription()
+async def generate_transcription(
+        audiofile: UploadFile = File(description="The file you would like transcribed")
+):
+
+    return await audio_transcription(audiofile)

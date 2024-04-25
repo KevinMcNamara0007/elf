@@ -1,6 +1,10 @@
+import os
+
+import numpy as np
 from fastapi import HTTPException
 from src.utilities.general import classifier, tokenizer, classifications, pipe
 from tensorflow.keras.preprocessing.sequence import pad_sequences
+import soundfile as sf
 
 
 async def load_model(key):
@@ -39,8 +43,12 @@ async def fetch_expert_response(messages, temperature, key):
         raise HTTPException(status_code=500, detail=f"Could not fetch response from model: {exc}")
 
 
-async def audio_transcription(path_to_wav="efs/preamble10.wav"):
+async def audio_transcription(audiofile):
     try:
-        return pipe(path_to_wav)["text"]
+        with open(audiofile.filename, "wb+") as infile:
+            infile.write(await audiofile.read())
+        transcription = pipe(audiofile.filename)["text"].strip()
+        os.remove(audiofile.filename)
+        return transcription
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Could not fetch response from transcriber: {exc}")

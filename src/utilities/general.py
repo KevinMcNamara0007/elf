@@ -6,6 +6,9 @@ from dotenv import load_dotenv
 from llama_cpp import Llama
 from tensorflow.keras.models import load_model
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
+import warnings
+
+warnings.filterwarnings('ignore')
 
 # Import ENV Vars
 load_dotenv(os.getenv("ENV", "src/config/.env-dev"))
@@ -35,18 +38,16 @@ classifications = {
     2: {"Model": general_expert, "Category": "math"}
 }
 
-if os.path.exists("efs/models/whisper-medium/distil-whisper"):
+if os.path.exists("efs/models/whisper-medium"):
     model_id = "efs/models/whisper-medium"
-    # dataset = load_from_disk("efs/models/whisper-medium/distil-whisper/librispeech_long")
 else:
     model_id = "openai/whisper-medium"
-    # dataset = load_dataset("distil-whisper/librispeech_long", "clean", split="validation")
 
-device = "cuda:0" if torch.cuda.is_available() else "cpu"
-torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+
+device = "cuda:0" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 
 model = AutoModelForSpeechSeq2Seq.from_pretrained(
-    model_id, torch_dtype=torch_dtype,
+    model_id,
     low_cpu_mem_usage=True,
     use_safetensors=True
 )
@@ -64,6 +65,5 @@ pipe = pipeline(
     chunk_length_s=30,
     batch_size=16,
     return_timestamps=True,
-    torch_dtype=torch_dtype,
     device=device
 )
