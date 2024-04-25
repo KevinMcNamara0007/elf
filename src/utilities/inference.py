@@ -1,8 +1,10 @@
 import os
-
+import time
+import scipy
 import numpy as np
+import torch
 from fastapi import HTTPException
-from src.utilities.general import classifier, tokenizer, classifications, pipe
+from src.utilities.general import classifier, tokenizer, classifications, stt_pipe, tts_tokenizer, tts_model
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 import soundfile as sf
 
@@ -47,8 +49,18 @@ async def audio_transcription(audiofile):
     try:
         with open(audiofile.filename, "wb+") as infile:
             infile.write(await audiofile.read())
-        transcription = pipe(audiofile.filename)["text"].strip()
+        transcription = stt_pipe(audiofile.filename)["text"].strip()
         os.remove(audiofile.filename)
         return transcription
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Could not fetch response from transcriber: {exc}")
+
+
+async def create_audio_from_transcription(transcript):
+    inputs = tts_tokenizer(transcript, return_tensors='pt')
+    with torch.no_grad():
+        output = tts_model(**inputs).waveform
+    wav_file = f"{str(int(time.time()))}.wav"
+    scipy.io.wavfile.write(wav_file, rate=tts_model.config.sampling_rate, data=output.float().numpy().T)
+    return wav_file
+

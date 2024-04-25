@@ -1,12 +1,12 @@
 import os
-import torch
 import pickle
 import subprocess
+import warnings
+import torch
 from dotenv import load_dotenv
 from llama_cpp import Llama
 from tensorflow.keras.models import load_model
-from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
-import warnings
+from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline, VitsModel, AutoTokenizer
 
 warnings.filterwarnings('ignore')
 
@@ -17,6 +17,8 @@ programming_model_path = os.getenv("programming")
 classifier_encoder = os.getenv("classifier_encoder")
 classifier_tokenizer = os.getenv("classifier_tokenizer")
 classifier_model = os.getenv("classifier_model")
+stt_model_path = os.getenv("stt_model_path")
+tts_model_path = os.getenv("tts_model_path")
 
 # Llama cpp install
 os.environ["CMAKE_ARGS"] = "-DLLAMA_BLAS=ON -DLLAMA_BLAS_VENDOR=OpenBLAS"
@@ -38,27 +40,31 @@ classifications = {
     2: {"Model": general_expert, "Category": "math"}
 }
 
-if os.path.exists("efs/models/whisper-medium"):
-    model_id = "efs/models/whisper-medium"
-else:
-    model_id = "openai/whisper-medium"
-
+stt_model_id = stt_model_path if os.path.exists(stt_model_path) else "openai/whisper-medium"
+tts_model_id = tts_model_path if os.path.exists(tts_model_path) else "facebook/mms-tts-eng"
 
 device = "cuda:0" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 
-model = AutoModelForSpeechSeq2Seq.from_pretrained(
-    model_id,
+stt_model = AutoModelForSpeechSeq2Seq.from_pretrained(
+    stt_model_id,
     low_cpu_mem_usage=True,
     use_safetensors=True
 )
-model.to(device)
-model.generation_config.language = "<|en|>"
+# If stt model has not been saved, save it
+if not os.path.exists(stt_model_path):
+    stt_model.save_pretrained(stt_model_path)
 
-processor = AutoProcessor.from_pretrained(model_id)
+# Send model to gpu or cpu device
+stt_model.to(device)
 
-pipe = pipeline(
+# Constrain the model to english language
+stt_model.generation_config.language = "<|en|>"
+
+# Create the pipeline
+processor = AutoProcessor.from_pretrained(stt_model_id)
+stt_pipe = pipeline(
     "automatic-speech-recognition",
-    model=model,
+    model=stt_model,
     tokenizer=processor.tokenizer,
     feature_extractor=processor.feature_extractor,
     max_new_tokens=128,
@@ -67,3 +73,16 @@ pipe = pipeline(
     return_timestamps=True,
     device=device
 )
+
+# Load the model
+tts_model = VitsModel.from_pretrained(tts_model_id)
+tts_tokenizer = AutoTokenizer.from_pretrained(tts_model_id)
+
+# If tts model has not been saved, save it
+if not os.path.exists(tts_model_id):
+    tts_model.save_pretrained(tts_model_id)
+    tts_tokenizer.save_pretrained(tts_model_id)
+
+
+def file_cleanup(filename):
+    os.remove(filename)
