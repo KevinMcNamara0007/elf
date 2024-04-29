@@ -5,6 +5,7 @@ import warnings
 import torch
 from dotenv import load_dotenv
 from llama_cpp import Llama
+from parler_tts import ParlerTTSForConditionalGeneration
 from tensorflow.keras.models import load_model
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline, VitsModel, AutoTokenizer
 
@@ -41,7 +42,7 @@ classifications = {
 }
 
 stt_model_id = stt_model_path if os.path.exists(stt_model_path) else "openai/whisper-medium"
-tts_model_id = tts_model_path if os.path.exists(tts_model_path) else "facebook/mms-tts-eng"
+tts_model_id = tts_model_path if os.path.exists(tts_model_path) else "parler-tts/parler_tts_mini_v0.1"
 
 device = "cuda:0" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 
@@ -75,13 +76,14 @@ stt_pipe = pipeline(
 )
 
 # Load the model
-tts_model = VitsModel.from_pretrained(tts_model_id)
+tts_model = ParlerTTSForConditionalGeneration.from_pretrained(tts_model_id).to(device)
 tts_tokenizer = AutoTokenizer.from_pretrained(tts_model_id)
 
+
 # If tts model has not been saved, save it
-if not os.path.exists(tts_model_id):
-    tts_model.save_pretrained(tts_model_id)
-    tts_tokenizer.save_pretrained(tts_model_id)
+if not os.path.exists(tts_model_path):
+    tts_model.save_pretrained(tts_model_path)
+    tts_tokenizer.save_pretrained(tts_model_path)
 
 
 def file_cleanup(filename):
