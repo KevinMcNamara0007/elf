@@ -3,11 +3,12 @@ import pickle
 import subprocess
 import warnings
 import torch
+from TTS.config import load_config
 from dotenv import load_dotenv
 from llama_cpp import Llama
-from parler_tts import ParlerTTSForConditionalGeneration
 from tensorflow.keras.models import load_model
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline, VitsModel, AutoTokenizer
+from TTS.api import TTS
 
 warnings.filterwarnings('ignore')
 
@@ -20,10 +21,14 @@ classifier_tokenizer = os.getenv("classifier_tokenizer")
 classifier_model = os.getenv("classifier_model")
 stt_model_path = os.getenv("stt_model_path")
 tts_model_path = os.getenv("tts_model_path")
+tts_config_path = os.getenv("tts_config_path")
 
 # Llama cpp install
 os.environ["CMAKE_ARGS"] = "-DLLAMA_BLAS=ON -DLLAMA_BLAS_VENDOR=OpenBLAS"
 subprocess.run(["pip", "install", "llama-cpp-python"])
+
+stt_model_id = stt_model_path if os.path.exists(stt_model_path) else "openai/whisper-medium"
+tts_model_id = tts_model_path if os.path.exists(tts_model_path) else "tts_models/en/ljspeech/tacotron2-DDC"
 
 # Load the tokenizer (assuming it has been saved as instructed)
 with open(classifier_tokenizer, 'rb') as handle:
@@ -40,9 +45,6 @@ classifications = {
     1: {"Model": general_expert, "Category": "language"},
     2: {"Model": general_expert, "Category": "math"}
 }
-
-stt_model_id = stt_model_path if os.path.exists(stt_model_path) else "openai/whisper-medium"
-tts_model_id = tts_model_path if os.path.exists(tts_model_path) else "parler-tts/parler_tts_mini_v0.1"
 
 device = "cuda:0" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 
@@ -75,15 +77,25 @@ stt_pipe = pipeline(
     device=device
 )
 
-# Load the model
-tts_model = ParlerTTSForConditionalGeneration.from_pretrained(tts_model_id).to(device)
-tts_tokenizer = AutoTokenizer.from_pretrained(tts_model_id)
-
-
-# If tts model has not been saved, save it
+# Load Model
 if not os.path.exists(tts_model_path):
-    tts_model.save_pretrained(tts_model_path)
-    tts_tokenizer.save_pretrained(tts_model_path)
+    tts_model = TTS(tts_model_id).to(device)
+    TTS().manager.create_dir_and_download_model(
+        model_name=tts_model_id,
+        output_path=tts_model_path,
+        model_item={
+            "tos_agreed": "tos_agreed.txt",
+            "github_rls_url": "https://coqui.gateway.scarf.sh/v0.6.1_models/tts_models--en--ljspeech--tacotron2-DDC.zip"
+        }
+    )
+else:
+    config = load_config(tts_config_path)
+    tts_model = TTS()
+    tts_model.load_tts_model_by_path(
+        model_path=f"{tts_model_id}/model_file.pth",
+        config_path=tts_config_path,
+        gpu=True if device != "cpu" else False
+    )
 
 
 def file_cleanup(filename):

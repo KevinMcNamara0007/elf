@@ -1,6 +1,4 @@
-import logging
-
-from src.utilities.general import classifications, stt_pipe
+from src.utilities.general import classifications
 from src.utilities.inference import fetch_expert_response, classify_prompt
 
 

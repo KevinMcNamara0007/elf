@@ -67,14 +67,8 @@ async def generate_transcription(
 @inference_router.post("/tts", description="Get transcription for audio file.")
 async def generate_speech(
         background_tasks: BackgroundTasks,
-        voice_actor: str = Form(
-            default="A female speaker with a slightly low-pitched voice delivers her words quite "
-                    "expressively, in a very confined sounding environment with clear audio "
-                    "quality. She speaks very fast.",
-            description="Adjust the details of the speaker."
-        ),
         transcript: str = Form(description="The text to be converted to audio")
 ):
-    file_name = await create_audio_from_transcription(transcript, voice_actor)
+    file_name = await create_audio_from_transcription(transcript)
     # background_tasks.add_task(file_cleanup, file_name)
     return FileResponse(file_name)
