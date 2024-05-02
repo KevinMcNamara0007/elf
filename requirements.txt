@@ -11,8 +11,6 @@ librosa
 soundfile
 protobuf
 python-dotenv
-TTS
-espeakng
 fastapi
 python-multipart
 starlette

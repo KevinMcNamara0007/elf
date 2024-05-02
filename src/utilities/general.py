@@ -3,12 +3,12 @@ import pickle
 import subprocess
 import warnings
 import torch
-from TTS.config import load_config
+# from TTS.config import load_config
 from dotenv import load_dotenv
 from llama_cpp import Llama
 from tensorflow.keras.models import load_model
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline, VitsModel, AutoTokenizer
-from TTS.api import TTS
+# from TTS.api import TTS
 
 warnings.filterwarnings('ignore')
 
@@ -78,24 +78,24 @@ stt_pipe = pipeline(
 )
 
 # Load Model
-if not os.path.exists(tts_model_path):
-    tts_model = TTS(tts_model_id).to(device)
-    TTS().manager.create_dir_and_download_model(
-        model_name=tts_model_id,
-        output_path=tts_model_path,
-        model_item={
-            "tos_agreed": "tos_agreed.txt",
-            "github_rls_url": "https://coqui.gateway.scarf.sh/v0.6.1_models/tts_models--en--ljspeech--tacotron2-DDC.zip"
-        }
-    )
-else:
-    config = load_config(tts_config_path)
-    tts_model = TTS()
-    tts_model.load_tts_model_by_path(
-        model_path=f"{tts_model_id}/model_file.pth",
-        config_path=tts_config_path,
-        gpu=True if device != "cpu" else False
-    )
+# if not os.path.exists(tts_model_path):
+#     tts_model = TTS(tts_model_id).to(device)
+#     TTS().manager.create_dir_and_download_model(
+#         model_name=tts_model_id,
+#         output_path=tts_model_path,
+#         model_item={
+#             "tos_agreed": "tos_agreed.txt",
+#             "github_rls_url": "https://coqui.gateway.scarf.sh/v0.6.1_models/tts_models--en--ljspeech--tacotron2-DDC.zip"
+#         }
+#     )
+# else:
+#     config = load_config(tts_config_path)
+#     tts_model = TTS()
+#     tts_model.load_tts_model_by_path(
+#         model_path=f"{tts_model_id}/model_file.pth",
+#         config_path=tts_config_path,
+#         gpu=True if device != "cpu" else False
+#     )
 
 
 def file_cleanup(filename):
