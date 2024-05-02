@@ -56,6 +56,7 @@ stt_model = AutoModelForSpeechSeq2Seq.from_pretrained(
 # If stt model has not been saved, save it
 if not os.path.exists(stt_model_path):
     stt_model.save_pretrained(stt_model_path)
+    stt_model.tokenizer.save_pretrained(stt_model_path)
 
 # Send model to gpu or cpu device
 stt_model.to(device)
