@@ -53,10 +53,12 @@ stt_model = AutoModelForSpeechSeq2Seq.from_pretrained(
     low_cpu_mem_usage=True,
     use_safetensors=True
 )
+processor = AutoProcessor.from_pretrained(stt_model_id)
+
 # If stt model has not been saved, save it
 if not os.path.exists(stt_model_path):
     stt_model.save_pretrained(stt_model_path)
-    stt_model.tokenizer.save_pretrained(stt_model_path)
+    processor.save_pretrained(stt_model_path)
 
 # Send model to gpu or cpu device
 stt_model.to(device)
@@ -65,7 +67,6 @@ stt_model.to(device)
 stt_model.generation_config.language = "<|en|>"
 
 # Create the pipeline
-processor = AutoProcessor.from_pretrained(stt_model_id)
 stt_pipe = pipeline(
     "automatic-speech-recognition",
     model=stt_model,
