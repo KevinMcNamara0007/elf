@@ -13,4 +13,4 @@ fastapi
 python-multipart
 starlette
 uvicorn
-
+TTS==0.22.0
