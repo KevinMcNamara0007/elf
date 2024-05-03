@@ -3,13 +3,14 @@ import pickle
 import subprocess
 import warnings
 import torch
-# from TTS.config import load_config
+from TTS.api import TTS
 from dotenv import load_dotenv
 from llama_cpp import Llama
 from tensorflow.keras.models import load_model
-from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline, VitsModel, AutoTokenizer
-# from TTS.api import TTS
+from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
+import sys
 
+sys.stdout.reconfigure(encoding='utf-8')
 warnings.filterwarnings('ignore')
 
 # Import ENV Vars
@@ -22,13 +23,17 @@ classifier_model = os.getenv("classifier_model")
 stt_model_path = os.getenv("stt_model_path")
 tts_model_path = os.getenv("tts_model_path")
 tts_config_path = os.getenv("tts_config_path")
+tts_vocoder_path = os.getenv("tts_vocoder_path")
+tts_vocoder_config_path = os.getenv("tts_vocoder_config_path")
 
 # Llama cpp install
 os.environ["CMAKE_ARGS"] = "-DLLAMA_BLAS=ON -DLLAMA_BLAS_VENDOR=OpenBLAS"
 subprocess.run(["pip", "install", "llama-cpp-python"])
+subprocess.run(["pip", "install", "numpy", "--upgrade"])
 
 stt_model_id = stt_model_path if os.path.exists(stt_model_path) else "openai/whisper-medium"
-tts_model_id = tts_model_path if os.path.exists(tts_model_path) else "tts_models/en/ljspeech/tacotron2-DDC"
+tts_model_id = tts_model_path if os.path.exists(tts_model_path) else "tts_models/en/ljspeech/glow-tts"
+tts_vocoder_id = tts_vocoder_path if os.path.exists(tts_vocoder_path) else "vocoder_models/en/ljspeech/hifigan_v2"
 
 # Load the tokenizer (assuming it has been saved as instructed)
 with open(classifier_tokenizer, 'rb') as handle:
@@ -79,25 +84,37 @@ stt_pipe = pipeline(
     device=device
 )
 
-# Load Model
-# if not os.path.exists(tts_model_path):
-#     tts_model = TTS(tts_model_id).to(device)
-#     TTS().manager.create_dir_and_download_model(
-#         model_name=tts_model_id,
-#         output_path=tts_model_path,
-#         model_item={
-#             "tos_agreed": "tos_agreed.txt",
-#             "github_rls_url": "https://coqui.gateway.scarf.sh/v0.6.1_models/tts_models--en--ljspeech--tacotron2-DDC.zip"
-#         }
-#     )
-# else:
-#     config = load_config(tts_config_path)
-#     tts_model = TTS()
-#     tts_model.load_tts_model_by_path(
-#         model_path=f"{tts_model_id}/model_file.pth",
-#         config_path=tts_config_path,
-#         gpu=True if device != "cpu" else False
-#     )
+
+if os.path.exists(tts_model_path):
+    tts_model = TTS()
+    tts_model.load_tts_model_by_path(
+        model_path=f"{tts_model_path}/model_file.pth",
+        config_path=tts_config_path,
+        vocoder_path=f"{tts_vocoder_path}/model_file.pth",
+        vocoder_config=tts_vocoder_config_path,
+        gpu=True if device != "cpu" else False
+    )
+else:
+    tts_model = TTS(tts_model_id).to(device)
+    TTS().manager.create_dir_and_download_model(
+        model_name=tts_model_id,
+        model_item={
+            "tos_agreed": "tos_agreed.txt",
+            "license": "Apache-2.0",
+            "github_rls_url": "https://coqui.gateway.scarf.sh/v0.6.1_models/tts_models--en--ljspeech--glow-tts.zip"
+        },
+        output_path=tts_model_path
+    )
+    TTS().manager.create_dir_and_download_model(
+        model_name=tts_vocoder_id,
+        model_item={
+            "tos_agreed": "tos_agreed.txt",
+            "license": "Apache-2.0",
+            "github_rls_url": "https://coqui.gateway.scarf.sh/v0.6.1_models/vocoder_models--en--ljspeech--multiband"
+                              "-melgan.zip"
+        },
+        output_path=tts_vocoder_path
+    )
 
 
 def file_cleanup(filename):

@@ -8,10 +8,9 @@ pytesseract
 scikit-learn
 accelerate
 librosa
-soundfile
-protobuf
 python-dotenv
 fastapi
 python-multipart
 starlette
 uvicorn
+
