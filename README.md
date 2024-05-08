@@ -9,7 +9,8 @@ Using conda:
    3. export PATH="<copied path>:$PATH"
 4. pip install -r requirements.txt
    1. #### To Enable GPU support
-      1. pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118 => Run inside of venv or on container
+      1. (Windows) pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118 => Run inside of venv or on container
+      2. (MacOSX) python3 -m pip install tensorflow-macos==2.15 tensorflow-metal tensorflow==2.15 keras==2.15 
 5. Download gguf files of models you want to use and place them in efs/models under root folder
 
 ## To Start

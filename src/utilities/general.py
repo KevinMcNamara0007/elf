@@ -86,14 +86,18 @@ stt_pipe = pipeline(
 
 
 if os.path.exists(tts_model_path):
-    tts_model = TTS()
-    tts_model.load_tts_model_by_path(
-        model_path=f"{tts_model_path}/model_file.pth",
-        config_path=tts_config_path,
-        vocoder_path=f"{tts_vocoder_path}/model_file.pth",
-        vocoder_config=tts_vocoder_config_path,
-        gpu=True if device != "cpu" else False
-    )
+    try:
+        tts_model = TTS()
+        tts_model.load_tts_model_by_path(
+            model_path=f"{tts_model_path}/model_file.pth",
+            config_path=tts_config_path,
+            vocoder_path=f"{tts_vocoder_path}/model_file.pth",
+            vocoder_config=tts_vocoder_config_path,
+            gpu=True if device != "cpu" else False
+        )
+    except Exception as e:
+        print(f"Error: {e}")
+        tts_model = TTS("tts_models/en/ljspeech/glow-tts").to(device)
 else:
     tts_model = TTS(tts_model_id).to(device)
     TTS().manager.create_dir_and_download_model(

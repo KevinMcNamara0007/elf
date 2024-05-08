@@ -1,4 +1,5 @@
 # pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+# python3 -m pip install tensorflow-macos==2.15 tensorflow-metal tensorflow==2.15 keras==2.15
 tensorflow==2.15.0
 keras==2.15.0
 llama-cpp-python
