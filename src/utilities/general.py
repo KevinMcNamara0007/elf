@@ -23,9 +23,10 @@ with open(classifier_tokenizer, 'rb') as handle:
     tokenizer = pickle.load(handle)
 
 classifier = load_model(classifier_model)
+context_window = 8196
 
 # Available Expert Models
-general_expert = Llama(model_path=general_model_path, n_gpu_layers=-1, n_ctx=8196)
+general_expert = Llama(model_path=general_model_path, n_gpu_layers=-1, n_ctx=context_window)
 # programming_expert = Llama(model_path=programming_model_path, n_gpu_layers=-1, n_ctx=2048)
 
 # Classifications
