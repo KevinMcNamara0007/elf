@@ -8,10 +8,7 @@ from llama_cpp import Llama
 from tensorflow.keras.models import load_model
 from transformers import (
     AutoModelForSpeechSeq2Seq,
-    AutoProcessor,
     pipeline,
-    VitsModel,
-    AutoTokenizer,
     AutoModelForCausalLM,
     AutoProcessor
 )
@@ -19,7 +16,7 @@ from transformers import (
 warnings.filterwarnings('ignore')
 
 # Import ENV Vars
-load_dotenv(os.getenv("ENV", "src/config/.env-dev"))
+load_dotenv(os.getenv("ENV", "config/.env-dev"))
 general_model_path = os.getenv("general")
 programming_model_path = os.getenv("programming")
 classifier_encoder = os.getenv("classifier_encoder")
@@ -33,6 +30,7 @@ vision_model_path = os.getenv("vision_model_path")
 # Llama cpp install
 os.environ["CMAKE_ARGS"] = "-DLLAMA_BLAS=ON -DLLAMA_BLAS_VENDOR=OpenBLAS"
 subprocess.run(["pip", "install", "llama-cpp-python"])
+
 
 stt_model_id = stt_model_path if os.path.exists(stt_model_path) else "openai/whisper-medium"
 tts_model_id = tts_model_path if os.path.exists(tts_model_path) else "tts_models/en/ljspeech/tacotron2-DDC"
@@ -62,7 +60,7 @@ classifications = {
     2: {"Model": general_expert, "Category": "math"}
 }
 
-device = "cuda:0" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
+device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 
 # Load Speech to Text Model
 stt_model = AutoModelForSpeechSeq2Seq.from_pretrained(
@@ -78,7 +76,7 @@ if not os.path.exists(stt_model_path):
     processor.save_pretrained(stt_model_path)
 
 # Send model to gpu or cpu device
-stt_model.to(device)
+stt_model.to("cuda:1" if torch.cuda.device_count() > 1 else device)
 
 # Constrain the model to english language
 stt_model.generation_config.language = "<|en|>"
@@ -93,7 +91,7 @@ stt_pipe = pipeline(
     chunk_length_s=30,
     batch_size=16,
     return_timestamps=True,
-    device=device
+    device="cuda:1" if torch.cuda.device_count() > 1 else device
 )
 
 # Load vision model

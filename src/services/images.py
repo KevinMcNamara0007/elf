@@ -4,6 +4,8 @@ import pytesseract
 from PIL import Image
 from fastapi import HTTPException
 
+from src.utilities.inference import image_processing
+
 
 async def extract_text_from_image(img):
     try:
@@ -18,3 +20,9 @@ async def extract_text_from_image(img):
         return text
     except Exception as exc:
         HTTPException(status_code=500, detail=f"Could not extract image: {exc}")
+
+
+async def vision_for_images(prompt, img):
+    image_bytes = await img.read()
+    image = Image.open(io.BytesIO(image_bytes))
+    return await image_processing(prompt, image)
