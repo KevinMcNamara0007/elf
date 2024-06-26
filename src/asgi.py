@@ -1,7 +1,5 @@
 from fastapi import FastAPI
-from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.exceptions import HTTPException
 from starlette.responses import RedirectResponse
 from src.controllers import inference, images
 

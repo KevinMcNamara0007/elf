@@ -39,10 +39,11 @@ async def classify_prompt(prompt, c_tokenizer=tokenizer, c_model=classifier, max
         raise HTTPException(status_code=500, detail=exc)
 
 
-async def fetch_expert_response(messages, temperature, key):
+async def fetch_expert_response(messages, temperature, key, max_tokens=context_window):
     """
     Call one of the models depending on the given key, pass the messages and temperature to use the model in its
-    inference mode.
+    inference mode. Max tokens refers to the output tokens.
+    :param max_tokens:
     :param messages:
     :param temperature:
     :param key:
@@ -54,7 +55,7 @@ async def fetch_expert_response(messages, temperature, key):
             messages=messages,
             temperature=temperature,
             # max number of tokens to be generated
-            max_tokens=context_window
+            max_tokens=max_tokens
         )
     except ValueError as val_err:
         print(val_err)

@@ -1,4 +1,4 @@
-from src.utilities.general import classifications
+from src.utilities.general import classifications, context_window
 from src.utilities.inference import fetch_expert_response, classify_prompt
 
 
@@ -8,10 +8,10 @@ async def get_all_models():
             in classifications.values()]
 
 
-async def get_expert_response(messages, temperature=.05):
+async def get_expert_response(messages, temperature=.05, max_tokens=context_window):
     key = await classify_prompt(messages[-1]["content"])
     # Fetch response
-    expert_response = await fetch_expert_response(messages, temperature, key)
+    expert_response = await fetch_expert_response(messages, temperature, key, context_window)
     # Extract model response
     final_response = expert_response['choices'][0]['message']['content']
     # Extract other useful data from original response
@@ -28,7 +28,7 @@ async def get_expert_response(messages, temperature=.05):
             {'role': 'assistant', 'content': final_response}
         ]
 
-        cont_response = await fetch_expert_response(continuation_prompt, temperature, key)
+        cont_response = await fetch_expert_response(continuation_prompt, temperature, key, context_window)
         finish_reason = cont_response['choices'][0]['finish_reason']
         if finish_reason == 'exceed':
             break

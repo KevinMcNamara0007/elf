@@ -26,7 +26,14 @@ classifier = load_model(classifier_model)
 context_window = 8196
 
 # Available Expert Models
-general_expert = Llama(model_path=general_model_path, n_gpu_layers=-1, n_ctx=context_window)
+general_expert = Llama(
+    model_path=general_model_path,
+    n_gpu_layers=-1,
+    n_ctx=context_window,
+    top_p=0.6,
+    top_k=10,
+    use_gpu=True
+)
 # programming_expert = Llama(model_path=programming_model_path, n_gpu_layers=-1, n_ctx=2048)
 
 # Classifications

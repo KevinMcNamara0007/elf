@@ -29,7 +29,8 @@ async def ask_an_expert(
             example=[{"role": "user", "content": "your prompt"}]
         ),
         prompt: str = Form(default=None, description="The prompt you want answered."),
-        temperature: float = Form(default=.05, description="Temperature of the model.")
+        temperature: float = Form(default=.05, description="Temperature of the model."),
+        max_output_tokens: int = Form(default=2000)
 ):
     if messages and prompt:
         history = json.loads(messages)
@@ -41,8 +42,9 @@ async def ask_an_expert(
     else:
         raise HTTPException(status_code=400, detail="Provide Messages, Prompt or both.")
     return await get_expert_response(
-        messages= history if type(messages) is not list else messages,
-        temperature=temperature
+        messages=history if type(messages) is not list else messages,
+        temperature=temperature,
+        max_tokens=max_output_tokens
     )
 
 
