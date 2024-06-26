@@ -3,12 +3,18 @@ import pickle
 import subprocess
 import warnings
 import torch
-# from TTS.config import load_config
 from dotenv import load_dotenv
 from llama_cpp import Llama
 from tensorflow.keras.models import load_model
-from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline, VitsModel, AutoTokenizer
-# from TTS.api import TTS
+from transformers import (
+    AutoModelForSpeechSeq2Seq,
+    AutoProcessor,
+    pipeline,
+    VitsModel,
+    AutoTokenizer,
+    AutoModelForCausalLM,
+    AutoProcessor
+)
 
 warnings.filterwarnings('ignore')
 
@@ -22,6 +28,7 @@ classifier_model = os.getenv("classifier_model")
 stt_model_path = os.getenv("stt_model_path")
 tts_model_path = os.getenv("tts_model_path")
 tts_config_path = os.getenv("tts_config_path")
+vision_model_path = os.getenv("vision_model_path")
 
 # Llama cpp install
 os.environ["CMAKE_ARGS"] = "-DLLAMA_BLAS=ON -DLLAMA_BLAS_VENDOR=OpenBLAS"
@@ -57,6 +64,7 @@ classifications = {
 
 device = "cuda:0" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 
+# Load Speech to Text Model
 stt_model = AutoModelForSpeechSeq2Seq.from_pretrained(
     stt_model_id,
     low_cpu_mem_usage=True,
@@ -88,15 +96,56 @@ stt_pipe = pipeline(
     device=device
 )
 
-# Load Model
+# Load vision model
+vision_model_id = vision_model_path if os.path.exists(vision_model_path) else "microsoft/Phi-3-vision-128k-instruct"
+
+vision_model = AutoModelForCausalLM.from_pretrained(
+    vision_model_id,
+    device_map=device,
+    trust_remote_code=True,
+    torch_dtype="auto",
+    _attn_implementation="eager"  # use _attn_implementation='flash_attention_2' to enable flash attention
+)
+
+vision_processor = AutoProcessor.from_pretrained(
+    vision_model_id,
+    trust_remote_code=True
+)
+
+if not os.path.exists(vision_model_path):
+    vision_model.save_pretrained(
+        vision_model_path,
+        is_main_process=True,
+        save_functional=True,
+        save_classif_head=True,
+        save_tokenizer=True,
+        save_shared=True,  # Ensure shared tensors are saved
+        safe_serialization=False  # Bypass safety check for shared tensors
+    )
+    vision_processor.save_pretrained(
+        vision_model_path,
+        is_main_process=True,
+        save_functional=True,
+        save_classif_head=True,
+        save_tokenizer=True,
+        save_shared=True,  # Ensure shared tensors are saved
+        safe_serialization=False  # Bypass safety check for shared tensors
+    )
+
+
+# Load TTS  Model
+# from TTS.config import load_config
+# from TTS.api import TTS
 # if not os.path.exists(tts_model_path):
 #     tts_model = TTS(tts_model_id).to(device)
 #     TTS().manager.create_dir_and_download_model(
 #         model_name=tts_model_id,
 #         output_path=tts_model_path,
 #         model_item={
-#             "tos_agreed": "tos_agreed.txt",
-#             "github_rls_url": "https://coqui.gateway.scarf.sh/v0.6.1_models/tts_models--en--ljspeech--tacotron2-DDC.zip"
+#             "tos_agreed":
+#               "tos_agreed.txt",
+#             "github_rls_url":
+#               "https://coqui.gateway.scarf.sh/v0.6.1_models/tts_models--en--ljspeech--tacotron2-DDC.zip"
 #         }
 #     )
 # else:
@@ -107,7 +156,6 @@ stt_pipe = pipeline(
 #         config_path=tts_config_path,
 #         gpu=True if device != "cpu" else False
 #     )
-
 
 def file_cleanup(filename):
     os.remove(filename)

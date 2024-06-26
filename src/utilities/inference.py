@@ -93,6 +93,7 @@ async def audio_transcription(audiofile):
         raise HTTPException(status_code=500, detail=f"Could not fetch response from transcriber: {exc}")
 
 
+
 # async def create_audio_from_transcription(transcript):
 #     file_name = f"{str(int(time.time()))}.wav"
 #     tts_model.tts_to_file(
