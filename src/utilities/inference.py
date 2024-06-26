@@ -1,5 +1,7 @@
+import os
+import time
 from fastapi import HTTPException
-from src.utilities.general import classifier, tokenizer, classifications, context_window
+from src.utilities.general import classifier, tokenizer, classifications, context_window, stt_pipe#, tts_model
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 
 
@@ -78,3 +80,24 @@ async def fetch_expert_response(messages, temperature, key, max_tokens=context_w
         }
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Could not fetch response from model: {exc}")
+
+
+async def audio_transcription(audiofile):
+    try:
+        with open(audiofile.filename, "wb+") as infile:
+            infile.write(await audiofile.read())
+        transcription = stt_pipe(audiofile.filename)["text"].strip()
+        os.remove(audiofile.filename)
+        return transcription
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Could not fetch response from transcriber: {exc}")
+
+
+# async def create_audio_from_transcription(transcript):
+#     file_name = f"{str(int(time.time()))}.wav"
+#     tts_model.tts_to_file(
+#         text=transcript,
+#         file_path=file_name
+#     )
+#     return file_name
+

@@ -1,4 +1,16 @@
 # pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+tensorflow==2.15.0
+keras==2.15.0
+llama-cpp-python
+transformers
+pillow
+pytesseract
+scikit-learn
+accelerate
+librosa
+soundfile
+protobuf
+python-dotenv
 fastapi
 python-multipart
 starlette
