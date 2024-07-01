@@ -1,3 +1,6 @@
+import datetime
+
+start = datetime.datetime.now()
 import subprocess
 from fastapi import FastAPI, HTTPException, Form
 from fastapi.responses import JSONResponse
@@ -5,18 +8,18 @@ import requests
 
 app = FastAPI()
 
-CONTEXT_WINDOW = "8196"
+CONTEXT_WINDOW = "32768"
 PORT = "8080"
 LLAMA_CPP_ENDPOINT = f"http://127.0.0.1:{PORT}/completion"
 LLAMA_CPP_PATH = "efs/frameworks/llama.cpp/build/bin/Release/llama-server.exe"  # Replace with actual path to llama-server
-MODEL_PATH = "efs/models/mistral-7b-instruct-v0.2.Q2_K.gguf"  # Replace with the actual path to your model
+MODEL_PATH = "efs/models/mistral-7b-instruct-v0.2.Q5_K_S.gguf"  # Replace with the actual path to your model
 
 llama_cpp_process = None
 
 
 def start_llama_cpp():
     global llama_cpp_process
-    llama_cpp_process = subprocess.Popen([LLAMA_CPP_PATH, "-m", MODEL_PATH, "-c", CONTEXT_WINDOW, "-p", PORT])
+    llama_cpp_process = subprocess.Popen([LLAMA_CPP_PATH, "-m", MODEL_PATH, "-c", CONTEXT_WINDOW, "-p", PORT, "-np", "1", "-ns", "1", "-ngl", "35", "-sm", "layer", "-ts", "0", "-mg", "0"])
 
 
 def stop_llama_cpp():
@@ -54,6 +57,10 @@ def infer_text(
     except requests.exceptions.RequestException as e:
         raise HTTPException(status_code=500, detail=f"Error communicating with llama.cpp: {str(e)}")
 
+
+print(f"Application load time: {datetime.datetime.now() - start}s")
+
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="127.0.0.1", port=8000)

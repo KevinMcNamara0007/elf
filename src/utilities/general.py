@@ -40,7 +40,7 @@ with open(classifier_tokenizer, 'rb') as handle:
     tokenizer = pickle.load(handle)
 
 classifier = load_model(classifier_model)
-context_window = 8196
+context_window = 32796
 
 # Available Expert Models
 general_expert = Llama(
@@ -48,45 +48,9 @@ general_expert = Llama(
     n_ctx=context_window,
     top_p=0.6,
     top_k=10,
-    use_gpu=True
+    main_gpu=0,
+    n_gpu_layers=35
 )
-# programming_expert = Llama(model_path=programming_model_path, n_gpu_layers=-1, n_ctx=2048)
-
-# Load vision model
-vision_model_id = vision_model_path if os.path.exists(vision_model_path) else "microsoft/Phi-3-vision-128k-instruct"
-
-vision_model = AutoModelForCausalLM.from_pretrained(
-    vision_model_id,
-    device_map=device,
-    trust_remote_code=True,
-    torch_dtype="auto",
-    _attn_implementation="eager"  # use _attn_implementation='flash_attention_2' to enable flash attention
-)
-
-vision_processor = AutoProcessor.from_pretrained(
-    vision_model_id,
-    trust_remote_code=True
-)
-
-if not os.path.exists(vision_model_path):
-    vision_model.save_pretrained(
-        vision_model_path,
-        is_main_process=True,
-        save_functional=True,
-        save_classif_head=True,
-        save_tokenizer=True,
-        save_shared=True,  # Ensure shared tensors are saved
-        safe_serialization=False  # Bypass safety check for shared tensors
-    )
-    vision_processor.save_pretrained(
-        vision_model_path,
-        is_main_process=True,
-        save_functional=True,
-        save_classif_head=True,
-        save_tokenizer=True,
-        save_shared=True,  # Ensure shared tensors are saved
-        safe_serialization=False  # Bypass safety check for shared tensors
-    )
 
 # Classifications
 classifications = {
@@ -95,37 +59,76 @@ classifications = {
     2: {"Model": general_expert, "Category": "math"}
 }
 
-# Load Speech to Text Model
-stt_model = AutoModelForSpeechSeq2Seq.from_pretrained(
-    stt_model_id,
-    low_cpu_mem_usage=True,
-    use_safetensors=True
-)
-processor = AutoProcessor.from_pretrained(stt_model_id)
 
-# If stt model has not been saved, save it
-if not os.path.exists(stt_model_path):
-    stt_model.save_pretrained(stt_model_path)
-    processor.save_pretrained(stt_model_path)
+# programming_expert = Llama(model_path=programming_model_path, n_gpu_layers=-1, n_ctx=2048)
 
-# Send model to gpu or cpu device
-stt_model.to(device)
+# # Load vision model
+# vision_model_id = vision_model_path if os.path.exists(vision_model_path) else "microsoft/Phi-3-vision-128k-instruct"
+#
+# vision_model = AutoModelForCausalLM.from_pretrained(
+#     vision_model_id,
+#     device_map=device,
+#     trust_remote_code=True,
+#     torch_dtype="auto",
+#     _attn_implementation="eager"  # use _attn_implementation='flash_attention_2' to enable flash attention
+# )
+#
+# vision_processor = AutoProcessor.from_pretrained(
+#     vision_model_id,
+#     trust_remote_code=True
+# )
+#
+# if not os.path.exists(vision_model_path):
+#     vision_model.save_pretrained(
+#         vision_model_path,
+#         is_main_process=True,
+#         save_functional=True,
+#         save_classif_head=True,
+#         save_tokenizer=True,
+#         save_shared=True,  # Ensure shared tensors are saved
+#         safe_serialization=False  # Bypass safety check for shared tensors
+#     )
+#     vision_processor.save_pretrained(
+#         vision_model_path,
+#         is_main_process=True,
+#         save_functional=True,
+#         save_classif_head=True,
+#         save_tokenizer=True,
+#         save_shared=True,  # Ensure shared tensors are saved
+#         safe_serialization=False  # Bypass safety check for shared tensors
+#     )
 
-# Constrain the model to english language
-stt_model.generation_config.language = "<|en|>"
-
-# Create the pipeline
-stt_pipe = pipeline(
-    "automatic-speech-recognition",
-    model=stt_model,
-    tokenizer=processor.tokenizer,
-    feature_extractor=processor.feature_extractor,
-    max_new_tokens=128,
-    chunk_length_s=30,
-    batch_size=16,
-    return_timestamps=True,
-    device="cuda:1" if torch.cuda.device_count() > 1 else device
-)
+# # Load Speech to Text Model
+# stt_model = AutoModelForSpeechSeq2Seq.from_pretrained(
+#     stt_model_id,
+#     low_cpu_mem_usage=True,
+#     use_safetensors=True
+# )
+# processor = AutoProcessor.from_pretrained(stt_model_id)
+#
+# # If stt model has not been saved, save it
+# if not os.path.exists(stt_model_path):
+#     stt_model.save_pretrained(stt_model_path)
+#     processor.save_pretrained(stt_model_path)
+#
+# # Send model to gpu or cpu device
+# stt_model.to(device)
+#
+# # Constrain the model to english language
+# stt_model.generation_config.language = "<|en|>"
+#
+# # Create the pipeline
+# stt_pipe = pipeline(
+#     "automatic-speech-recognition",
+#     model=stt_model,
+#     tokenizer=processor.tokenizer,
+#     feature_extractor=processor.feature_extractor,
+#     max_new_tokens=128,
+#     chunk_length_s=30,
+#     batch_size=16,
+#     return_timestamps=True,
+#     device="cuda:1" if torch.cuda.device_count() > 1 else device
+# )
 
 
 # Load TTS  Model

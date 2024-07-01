@@ -2,8 +2,8 @@ import os
 import time
 from PIL import Image
 from fastapi import HTTPException
-from src.utilities.general import classifier, tokenizer, classifications, context_window, stt_pipe, \
-    vision_processor, device, vision_model  # , tts_model
+from src.utilities.general import (classifier, tokenizer, classifications, context_window)
+                                   #stt_pipe, vision_processor, device, vision_model, tts_model)
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 
 
@@ -84,38 +84,38 @@ async def fetch_expert_response(messages, temperature, key, max_tokens=context_w
         raise HTTPException(status_code=500, detail=f"Could not fetch response from model: {exc}")
 
 
-async def audio_transcription(audiofile):
-    try:
-        with open(audiofile.filename, "wb+") as infile:
-            infile.write(await audiofile.read())
-        transcription = stt_pipe(audiofile.filename)["text"].strip()
-        os.remove(audiofile.filename)
-        return transcription
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Could not fetch response from transcriber: {exc}")
+# async def audio_transcription(audiofile):
+#     try:
+#         with open(audiofile.filename, "wb+") as infile:
+#             infile.write(await audiofile.read())
+#         transcription = stt_pipe(audiofile.filename)["text"].strip()
+#         os.remove(audiofile.filename)
+#         return transcription
+#     except Exception as exc:
+#         raise HTTPException(status_code=500, detail=f"Could not fetch response from transcriber: {exc}")
 
 
-async def image_processing(prompt, image):
-    try:
-        messages = [
-            {"role": "user", "content": f"<|image_1|>\n{prompt}"}
-        ]
-        prompt = vision_processor.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        inputs = vision_processor(prompt, [image], return_tensors="pt").to(device)
-        generation_args = {
-            "max_new_tokens": 2000,
-            "temperature": 0.0,
-            "do_sample": False
-        }
-        generate_ids = vision_model.generate(**inputs, eos_token_id=vision_processor.tokenizer.eos_token_id,
-                                             **generation_args)
-        generate_ids = generate_ids[:, inputs['input_ids'].shape[1]:]
-        response = \
-            vision_processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        return response
-    except Exception as exc:
-        print(str(exc))
-        raise HTTPException(status_code=500, detail=f"Error in image vision: {exc}")
+# async def image_processing(prompt, image):
+#     try:
+#         messages = [
+#             {"role": "user", "content": f"<|image_1|>\n{prompt}"}
+#         ]
+#         prompt = vision_processor.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+#         inputs = vision_processor(prompt, [image], return_tensors="pt").to(device)
+#         generation_args = {
+#             "max_new_tokens": 2000,
+#             "temperature": 0.0,
+#             "do_sample": False
+#         }
+#         generate_ids = vision_model.generate(**inputs, eos_token_id=vision_processor.tokenizer.eos_token_id,
+#                                              **generation_args)
+#         generate_ids = generate_ids[:, inputs['input_ids'].shape[1]:]
+#         response = \
+#             vision_processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+#         return response
+#     except Exception as exc:
+#         print(str(exc))
+#         raise HTTPException(status_code=500, detail=f"Error in image vision: {exc}")
 
 # async def create_audio_from_transcription(transcript):
 #     file_name = f"{str(int(time.time()))}.wav"
