@@ -28,7 +28,8 @@ tts_config_path = os.getenv("tts_config_path")
 vision_model_path = os.getenv("vision_model_path")
 
 # Llama cpp install
-os.environ["CMAKE_ARGS"] = "-DLLAMA_BLAS=ON -DLLAMA_BLAS_VENDOR=OpenBLAS"
+os.environ["CMAKE_ARGS"] = "-DLLAMA_BLAS=ON"
+os.environ["FORCE_CMAKE"] = "1"
 subprocess.run(["pip", "install", "llama-cpp-python"])
 device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 
