@@ -1,9 +1,11 @@
 import os
+
+import requests
 import time
 from PIL import Image
 from fastapi import HTTPException
-from src.utilities.general import (classifier, tokenizer, classifications, context_window)
-                                   #stt_pipe, vision_processor, device, vision_model, tts_model)
+from src.utilities.general import (classifier, tokenizer, classifications, CONTEXT_WINDOW)
+#stt_pipe, vision_processor, device, vision_model, tts_model)
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 
 
@@ -13,7 +15,7 @@ async def load_model(key):
     :param key:
     :return:
     """
-    return classifications.get(key)["Model"]
+    return classifications.get(key)["Link"]
 
 
 async def classify_prompt(prompt, c_tokenizer=tokenizer, c_model=classifier, max_len=100):
@@ -43,7 +45,7 @@ async def classify_prompt(prompt, c_tokenizer=tokenizer, c_model=classifier, max
         raise HTTPException(status_code=500, detail=exc)
 
 
-async def fetch_expert_response(messages, temperature, key, max_tokens=context_window):
+async def fetch_expert_response(messages, temperature, key, max_tokens=CONTEXT_WINDOW):
     """
     Call one of the models depending on the given key, pass the messages and temperature to use the model in its
     inference mode. Max tokens refers to the output tokens.
@@ -83,6 +85,22 @@ async def fetch_expert_response(messages, temperature, key, max_tokens=context_w
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Could not fetch response from model: {exc}")
 
+
+async def fetch_llama_cpp_response(messages, temperature, key, max_tokens=CONTEXT_WINDOW):
+    try:
+        expert = await load_model(key)
+        payload = {
+            "prompt": f"User: {messages}\nAssistant:",
+            "n_predict": max_tokens,
+            "temperature": temperature,
+            # Note the corrected temperature value
+        }
+        expert_response = requests.post(expert, json=payload)
+        expert_response.raise_for_status()
+        return expert_response.json()
+    except Exception as exc:
+        print(str(exc))
+        raise HTTPException(status_code=500, detail=f"Could not fetch response from llama.cpp: {exc}")
 
 # async def audio_transcription(audiofile):
 #     try:

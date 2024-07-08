@@ -1,19 +1,15 @@
+import multiprocessing
 import os
 import pickle
+import platform
 import subprocess
-import warnings
+import shutil
 import torch
 from dotenv import load_dotenv
-from llama_cpp import Llama
 from tensorflow.keras.models import load_model
-from transformers import (
-    AutoModelForSpeechSeq2Seq,
-    pipeline,
-    AutoModelForCausalLM,
-    AutoProcessor
-)
 
-warnings.filterwarnings('ignore')
+# Global LLAMA_SERVER_PID variable
+LLAMA_SERVER_PID = None
 
 # Import ENV Vars
 load_dotenv(os.getenv("ENV", "config/.env-dev"))
@@ -26,38 +22,133 @@ stt_model_path = os.getenv("stt_model_path")
 tts_model_path = os.getenv("tts_model_path")
 tts_config_path = os.getenv("tts_config_path")
 vision_model_path = os.getenv("vision_model_path")
-
-# Llama cpp install
-os.environ["CMAKE_ARGS"] = "-DLLAMA_BLAS=ON"
-os.environ["FORCE_CMAKE"] = "1"
-subprocess.run(["pip", "install", "llama-cpp-python"])
+CONTEXT_WINDOW = os.getenv("CONTEXT_WINDOW")
+HOST = os.getenv("HOST")
+UVICORN_PORT = os.getenv("UVICORN_PORT")
+LLAMA_CPP_HOME = os.getenv("LLAMA_CPP_HOME")
+LLAMA_SOURCE_FOLDER = os.path.join(os.getcwd(), os.getenv("LLAMA_SOURCE_FOLDER"))
+LLAMA_PORT = int(UVICORN_PORT) + 1
+LLAMA_CPP_ENDPOINT = f"http://{HOST}:{LLAMA_PORT}/completion"
+GENERAL_MODEL_PATH = os.path.join(os.getcwd(), general_model_path)
+NUMBER_OF_CORES = multiprocessing.cpu_count()
+WORKERS = f"-j {NUMBER_OF_CORES - 2}" if NUMBER_OF_CORES > 2 else ""
+PLATFORM = platform.system()
 device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 
 stt_model_id = stt_model_path if os.path.exists(stt_model_path) else "openai/whisper-medium"
-tts_model_id = tts_model_path if os.path.exists(tts_model_path) else "tts_models/en/ljspeech/tacotron2-DDC"
+
+# In case of Windows Run add .exe extension
+if PLATFORM == "Windows":
+    LLAMA_CPP_PATH = os.path.join(LLAMA_CPP_HOME, "bin/Release/llama-server.exe")
+else:
+    LLAMA_CPP_PATH = os.path.join(LLAMA_CPP_HOME, "bin/Release/llama-server")
+
+
+# Function to ensure llama.cpp repository exists
+def ensure_llama_cpp_repository():
+    # Check if Git repository exists and clone if it doesn't
+    if not os.path.exists(os.path.join(LLAMA_SOURCE_FOLDER, ".git")):
+        remove_directory(LLAMA_SOURCE_FOLDER)
+        subprocess.run(["git", "clone", "https://github.com/ggerganov/llama.cpp.git", LLAMA_SOURCE_FOLDER], check=True)
+
+
+def remove_directory(dir_path):
+    if os.path.exists(dir_path):
+        try:
+            shutil.rmtree(dir_path)
+            print(f"Directory '{dir_path}' removed successfully.")
+        except OSError as e:
+            print(f"Error: {dir_path} : {e.strerror}")
+
+
+# Ensure llama.cpp repository exists
+ensure_llama_cpp_repository()
+
+
+def compile_llama_cpp():
+    # Ensure LLAMA_CPP_HOME directory exists
+    if not os.path.exists(LLAMA_CPP_HOME):
+        # Change directory to LLAMA_CPP_HOME
+        os.chdir(LLAMA_CPP_HOME)
+
+        # Configure CMake
+        gpu_support = "-DGGML_CUDA=ON"  # Adjust as needed based on your setup
+        try:
+            source_command = subprocess.run(
+                ["cmake", "-B", ".", "-S", LLAMA_SOURCE_FOLDER, gpu_support],
+                check=True,
+                capture_output=True,
+            )
+            print(source_command.stdout.decode())
+            print(source_command.stderr.decode())
+
+            # Build llama-server target
+            build_command = subprocess.run(
+                ["cmake", "--build", ".", "--config", "Release", "--target", "llama-server", WORKERS],
+                check=True,
+                capture_output=True,
+            )
+            print(build_command.stdout.decode())
+            print(build_command.stderr.decode())
+
+        except subprocess.CalledProcessError as e:
+            print(f"Error during cmake or build process: {e}")
+            raise e
+
+
+compile_llama_cpp()
+
+
+def start_llama_cpp():
+    global LLAMA_SERVER_PID
+
+    # Change working directory to LLAMA_CPP_HOME for starting llama-server
+    cwd = os.getcwd()
+    os.chdir(LLAMA_CPP_HOME)
+
+    llama_cpp_process = subprocess.Popen(
+        [LLAMA_CPP_PATH, "--model", GENERAL_MODEL_PATH, "--ctx-size", CONTEXT_WINDOW, "--port", str(LLAMA_PORT), "-np",
+         "2", "-ns", "1", "-ngl", "16", "-sm", "layer", "-ts", "0", "-mg", "-1"],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
+    LLAMA_SERVER_PID = llama_cpp_process.pid
+
+    # Change back to the original working directory
+    os.chdir(cwd)
+
+
+def stop_llama_cpp():
+    global LLAMA_SERVER_PID
+    if LLAMA_SERVER_PID:
+        os.kill(int(LLAMA_SERVER_PID), 9)  # Terminate the process
+        LLAMA_SERVER_PID = None
+
+
+# Capture SIGTERM signal to stop llama-server
+def handle_sigterm(signum, frame):
+    stop_llama_cpp()
+    exit(0)
+
+
+def replace_port_in_url(url, new_port):
+    parts = url.split(":")
+    parts[-1] = str(new_port) + "/" + parts[-1].split("/")[-1]  # Replace the second last part (the port)
+    return ":".join(parts)
+
 
 # Load the tokenizer (assuming it has been saved as instructed)
 with open(classifier_tokenizer, 'rb') as handle:
     tokenizer = pickle.load(handle)
 
+# Load Classifier Model
 classifier = load_model(classifier_model)
-context_window = 32796
 
-# Available Expert Models
-general_expert = Llama(
-    model_path=general_model_path,
-    n_ctx=context_window,
-    top_p=0.6,
-    top_k=10,
-    main_gpu=0,
-    n_gpu_layers=35
-)
-
-# Classifications
+# Available Classifications
 classifications = {
-    0: {"Model": general_expert, "Category": "code"},
-    1: {"Model": general_expert, "Category": "language"},
-    2: {"Model": general_expert, "Category": "math"}
+    0: {"Model": GENERAL_MODEL_PATH, "Category": "code", "Link": replace_port_in_url(LLAMA_CPP_ENDPOINT, LLAMA_PORT)},
+    1: {"Model": GENERAL_MODEL_PATH, "Category": "language",
+        "Link": replace_port_in_url(LLAMA_CPP_ENDPOINT, LLAMA_PORT)},
+    2: {"Model": GENERAL_MODEL_PATH, "Category": "math", "Link": replace_port_in_url(LLAMA_CPP_ENDPOINT, LLAMA_PORT)}
 }
 
 
