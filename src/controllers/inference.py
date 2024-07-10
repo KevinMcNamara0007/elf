@@ -29,23 +29,29 @@ async def ask_an_expert(
         messages: str = Form(
             default=None,
             description="Chat style prompting",
-            example=[{"User": "your prompt"}]
+            example=[{"role": "User", "content": "your prompt"}]
         ),
         prompt: str = Form(default=None, description="The prompt you want answered."),
         temperature: float = Form(default=.05, description="Temperature of the model."),
+        rules: str = Form(default=f"<|start_header_id|>system<|end_header_id|>\n\n"
+                                  f"You are a friendly virtual assistant."
+                                  f"Your role is to answer the user's questions and follow their instructions."
+                                  f"Be concise and accurate when responding to the user's requests."
+                                  f"<|eot_id|>", description="Rules of the model."),
         max_output_tokens: int = Form(default=2000)
 ):
     if messages and prompt:
         history = json.loads(messages)
-        history.append({"User": prompt})
+        history.append({"role": "User", "content": prompt})
     elif messages:
         history = json.loads(messages)
     elif prompt:
-        history = [{"role": "user", "content": prompt}]
+        history = [{"role": "User", "content": prompt}]
     else:
         raise HTTPException(status_code=400, detail="Provide Messages, Prompt or both.")
     return await get_expert_response(
-        messages=history if type(messages) is not list else messages,
+        rules=rules,
+        messages=history,
         temperature=temperature,
         max_tokens=max_output_tokens
     )

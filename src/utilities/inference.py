@@ -86,13 +86,25 @@ async def fetch_expert_response(messages, temperature, key, max_tokens=CONTEXT_W
         raise HTTPException(status_code=500, detail=f"Could not fetch response from model: {exc}")
 
 
-async def fetch_llama_cpp_response(messages, temperature, key, max_tokens=CONTEXT_WINDOW):
+async def fetch_llama_cpp_response(rules, messages, temperature, key, max_tokens=CONTEXT_WINDOW):
+    prompt = rules
+    for message in messages:
+        if message["role"] == "assistant":
+            line = f"<|start_header_id|>system<|end_header_id|>\n\n{message['content']}<|eot_id|>"
+        else:
+            line = f"<|start_header_id|>user<|end_header_id|>\n\n{message['content']}<|eot_id|>"
+        prompt += line
+
     try:
         expert = await load_model(key)
         payload = {
-            "prompt": f"User: {messages}\nAssistant:",
+            "prompt": prompt,
             "n_predict": max_tokens,
             "temperature": temperature,
+            "stop": [
+                "<|start_header_id|>user", "<|start_footer_id|>", "<|end_user|>", "<|start_header_id|>assistant",
+                "<|eot_id|>"
+            ]
             # Note the corrected temperature value
         }
         expert_response = requests.post(expert, json=payload)

@@ -109,7 +109,7 @@ def start_llama_cpp():
 
     llama_cpp_process = subprocess.Popen(
         [LLAMA_CPP_PATH, "--model", GENERAL_MODEL_PATH, "--ctx-size", CONTEXT_WINDOW, "--port", str(LLAMA_PORT), "-np",
-         "2", "-ns", "1", "-ngl", "16", "-sm", "layer", "-ts", "0", "-mg", "-1"],
+         "2", "-ns", "1", "-ngl", "24", "-sm", "layer", "-ts", "0", "-mg", "-1", "--chat-template", "llama3"],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE
     )
     LLAMA_SERVER_PID = llama_cpp_process.pid
