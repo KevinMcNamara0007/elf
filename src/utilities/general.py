@@ -69,6 +69,7 @@ def compile_llama_cpp():
     # Ensure LLAMA_CPP_HOME directory exists
     if not os.path.exists(LLAMA_CPP_HOME):
         # Change directory to LLAMA_CPP_HOME
+        os.makedirs(LLAMA_CPP_HOME)
         os.chdir(LLAMA_CPP_HOME)
 
         # Configure CMake

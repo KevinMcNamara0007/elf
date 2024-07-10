@@ -1,7 +1,6 @@
 # pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 tensorflow==2.15.0
 keras==2.15.0
-llama-cpp-python
 transformers
 pillow
 pytesseract
@@ -19,7 +18,5 @@ pillow
 pytesseract
 python-dotenv
 scikit-learn
-tensorflow==2.15.0
-keras==2.15.0
 numpy
-llama-cpp-python
+cmake

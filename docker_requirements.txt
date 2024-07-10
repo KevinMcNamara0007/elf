@@ -1,0 +1,18 @@
+# Uvicorn + FastAPI Dependencies
+fastapi
+python-multipart
+starlette
+uvicorn
+# Llama.cpp Dependencies
+cmake
+protobuf
+# Image Processing Dependencies
+pillow
+pytesseract
+# Model Dependencies
+transformers
+scikit-learn
+accelerate
+librosa
+soundfile
+numpy

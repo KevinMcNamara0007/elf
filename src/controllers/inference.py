@@ -29,7 +29,7 @@ async def ask_an_expert(
         messages: str = Form(
             default=None,
             description="Chat style prompting",
-            example=[{"role": "user", "content": "your prompt"}]
+            example=[{"User": "your prompt"}]
         ),
         prompt: str = Form(default=None, description="The prompt you want answered."),
         temperature: float = Form(default=.05, description="Temperature of the model."),
@@ -37,7 +37,7 @@ async def ask_an_expert(
 ):
     if messages and prompt:
         history = json.loads(messages)
-        history.append({"role": "user", "content": prompt})
+        history.append({"User": prompt})
     elif messages:
         history = json.loads(messages)
     elif prompt:
