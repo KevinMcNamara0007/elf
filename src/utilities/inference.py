@@ -30,12 +30,16 @@ async def classify_prompt(prompt, c_tokenizer=tokenizer, c_model=classifier, max
     try:
         # Tokenize the prompt
         seq = c_tokenizer.texts_to_sequences([prompt])
+        print("tokenized: {0}".format(seq))
         # Pad the sequence
         padded = pad_sequences(seq, maxlen=max_len, padding='post')
+        print("padded: {0}".format(padded))
         # Predict the category
         prediction = c_model.predict(padded)[0]
+        print("prediction: {0}".format(prediction))
         # Convert predictions to binary
         binary_prediction = [0 if x < .49 else 1 for x in prediction]
+        print("bin prediction: {0}".format(binary_prediction))
         # Check for ambiguity and go with safe model if found
         if binary_prediction.count(1) > 1 or binary_prediction.count(1) < 1:
             return 1
@@ -94,7 +98,6 @@ async def fetch_llama_cpp_response(rules, messages, temperature, key, max_tokens
         else:
             line = f"<|start_header_id|>user<|end_header_id|>\n\n{message['content']}<|eot_id|>"
         prompt += line
-
     try:
         expert = await load_model(key)
         payload = {

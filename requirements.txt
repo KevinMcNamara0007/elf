@@ -11,12 +11,8 @@ soundfile
 protobuf
 python-dotenv
 fastapi
+requests
 python-multipart
 starlette
 uvicorn
 pillow
-pytesseract
-python-dotenv
-scikit-learn
-numpy
-cmake

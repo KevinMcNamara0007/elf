@@ -9,7 +9,8 @@ async def get_all_models():
 
 
 async def get_expert_response(rules, messages, temperature=.05, max_tokens=CONTEXT_WINDOW):
-    key = await classify_prompt(messages[-1]["content"])
+    # key = await classify_prompt(messages[-1]["content"])
+    key = 1
     # Fetch response
     cont_response = await fetch_llama_cpp_response(rules, messages, temperature, key, max_tokens)
     # Extract model response

@@ -7,9 +7,12 @@ import shutil
 import torch
 from dotenv import load_dotenv
 from tensorflow.keras.models import load_model
+import time
+import socket
 
 # Global LLAMA_SERVER_PID variable
 LLAMA_SERVER_PID = None
+
 
 # Import ENV Vars
 load_dotenv(os.getenv("ENV", "config/.env-dev"))
@@ -61,22 +64,21 @@ def remove_directory(dir_path):
             print(f"Error: {dir_path} : {e.strerror}")
 
 
-# Ensure llama.cpp repository exists
-ensure_llama_cpp_repository()
-
-
 def compile_llama_cpp():
+    global LLAMA_CPP_PATH
+    LLAMA_CPP_PATH = check_possible_paths()
     # Ensure LLAMA_CPP_HOME directory exists
-    if not os.path.exists(LLAMA_CPP_HOME):
+    if LLAMA_CPP_PATH == "":
         # Change directory to LLAMA_CPP_HOME
-        os.makedirs(LLAMA_CPP_HOME)
+        remove_directory(LLAMA_CPP_HOME)
+        os.makedirs(LLAMA_CPP_HOME, exist_ok=True)
         os.chdir(LLAMA_CPP_HOME)
 
         # Configure CMake
         gpu_support = "-DGGML_CUDA=ON"  # Adjust as needed based on your setup
         try:
             source_command = subprocess.run(
-                ["cmake", "-B", ".", "-S", LLAMA_SOURCE_FOLDER, gpu_support],
+                ["cmake", "..", "-B", ".", "-S", LLAMA_SOURCE_FOLDER, gpu_support],
                 check=True,
                 capture_output=True,
             )
@@ -91,16 +93,29 @@ def compile_llama_cpp():
             )
             print(build_command.stdout.decode())
             print(build_command.stderr.decode())
-
+            LLAMA_CPP_PATH = check_possible_paths()
+            if LLAMA_CPP_PATH == "":
+                raise RuntimeException("Could not find llama-server.")
         except subprocess.CalledProcessError as e:
             print(f"Error during cmake or build process: {e}")
             raise e
 
 
-compile_llama_cpp()
+def check_possible_paths():
+    global LLAMA_CPP_PATH
+    if not os.path.exists(LLAMA_CPP_PATH):
+        split_path = LLAMA_CPP_PATH.split("Release/")
+        LLAMA_CPP_PATH = os.path.join(split_path[0], split_path[1])
+        if not os.path.exists(LLAMA_CPP_PATH):
+            return ""
+    return LLAMA_CPP_PATH
 
 
 def start_llama_cpp():
+    # Ensure llama.cpp repository exists
+    ensure_llama_cpp_repository()
+    # Compile the folder
+    compile_llama_cpp()
     global LLAMA_SERVER_PID
 
     # Change working directory to LLAMA_CPP_HOME for starting llama-server
@@ -109,11 +124,32 @@ def start_llama_cpp():
 
     llama_cpp_process = subprocess.Popen(
         [LLAMA_CPP_PATH, "--model", GENERAL_MODEL_PATH, "--ctx-size", CONTEXT_WINDOW, "--port", str(LLAMA_PORT), "-np",
-         "2", "-ns", "1", "-ngl", "24", "-sm", "layer", "-ts", "0", "-mg", "-1", "--chat-template", "llama3"],
+         "2", "-ns", "1", "-ngl", "24", "-sm", "layer", "-ts", "0", "-mg", "-1"],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE
     )
     LLAMA_SERVER_PID = llama_cpp_process.pid
+    print("LLAMA_SERVER_PID:", LLAMA_SERVER_PID)
 
+    # Wait for the server to be ready
+    max_attempts = 10
+    wait_time = 2  # seconds
+    server_ready = False
+
+    for attempt in range(max_attempts):
+        time.sleep(wait_time)
+        try:
+            with socket.create_connection(('localhost', LLAMA_PORT), timeout=1):
+                print(f"Connection to llama-server on port {LLAMA_PORT} successful.")
+                server_ready = True
+                break
+        except (ConnectionRefusedError, socket.timeout) as e:
+            print(f"Attempt {attempt + 1}: Connection to llama-server on port {LLAMA_PORT} failed. Retrying...")
+            continue
+
+    if not server_ready:
+        print(f"Error: llama-server did not start within the expected time. {llama_cpp_process.communicate()[0].decode('utf-8')}")
+        raise Exception("Could not start llama-server.")
+        # You may choose to handle this error, raise an exception, or take other actions.
     # Change back to the original working directory
     os.chdir(cwd)
 

@@ -16,23 +16,17 @@ inference_router = APIRouter(
 )
 
 
-@inference_router.get("/all_models",
-                      status_code=status.HTTP_200_OK,
-                      description="Returns a list of the available models."
-                      )
+@inference_router.get("/all_models", status_code=status.HTTP_200_OK,
+                      description="Returns a list of the available models.")
 async def fetch_all_models():
     return await get_all_models()
 
 
 @inference_router.post("/ask_an_expert", status_code=status.HTTP_200_OK, description="Ask any question.")
 async def ask_an_expert(
-        messages: str = Form(
-            default=None,
-            description="Chat style prompting",
-            example=[{"role": "User", "content": "your prompt"}]
-        ),
+        messages: str = Form(default=None, description="Chat style prompting"),
         prompt: str = Form(default=None, description="The prompt you want answered."),
-        temperature: float = Form(default=.05, description="Temperature of the model."),
+        temperature: float = Form(default=0.05, description="Temperature of the model."),
         rules: str = Form(default=f"<|start_header_id|>system<|end_header_id|>\n\n"
                                   f"You are a friendly virtual assistant."
                                   f"Your role is to answer the user's questions and follow their instructions."
@@ -40,15 +34,21 @@ async def ask_an_expert(
                                   f"<|eot_id|>", description="Rules of the model."),
         max_output_tokens: int = Form(default=2000)
 ):
-    if messages and prompt:
-        history = json.loads(messages)
+    history = []
+    if messages:
+        try:
+            history = json.loads(messages)
+            if not isinstance(history, list):
+                raise HTTPException(status_code=400, detail="Messages must be a list of dictionaries.")
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid JSON format for messages.")
+
+    if prompt:
         history.append({"role": "User", "content": prompt})
-    elif messages:
-        history = json.loads(messages)
-    elif prompt:
-        history = [{"role": "User", "content": prompt}]
-    else:
+
+    if not messages and not prompt:
         raise HTTPException(status_code=400, detail="Provide Messages, Prompt or both.")
+
     return await get_expert_response(
         rules=rules,
         messages=history,

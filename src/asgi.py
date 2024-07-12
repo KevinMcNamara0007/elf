@@ -1,3 +1,5 @@
+from src.utilities.general import start_llama_cpp, stop_llama_cpp, HOST, UVICORN_PORT, handle_sigterm
+start_llama_cpp()
 from contextlib import asynccontextmanager
 import signal
 import uvicorn
@@ -6,7 +8,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException
 from starlette.responses import RedirectResponse
-from src.utilities.general import start_llama_cpp, stop_llama_cpp, HOST, UVICORN_PORT, handle_sigterm
+
 from src.controllers import inference  #, images
 from src.utilities.exception_handlers import request_validation_exception_handler, http_exception_handler, \
     unhandled_exception_handler
@@ -60,5 +62,4 @@ async def docs_redirect():
 signal.signal(signal.SIGTERM, handle_sigterm)
 
 if __name__ == "__main__":
-    start_llama_cpp()
     uvicorn.run(elf, host=HOST, port=int(UVICORN_PORT))
