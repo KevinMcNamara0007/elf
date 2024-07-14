@@ -9,6 +9,8 @@ from dotenv import load_dotenv
 from tensorflow.keras.models import load_model
 import time
 import socket
+import requests
+import psutil
 
 # Global LLAMA_SERVER_PID variable
 LLAMA_SERVER_PID = None
@@ -114,41 +116,51 @@ def check_possible_paths():
 def start_llama_cpp():
     # Ensure llama.cpp repository exists
     ensure_llama_cpp_repository()
+    kill_process_on_port(LLAMA_PORT)
     # Compile the folder
     compile_llama_cpp()
     global LLAMA_SERVER_PID
 
+
     # Change working directory to LLAMA_CPP_HOME for starting llama-server
     cwd = os.getcwd()
     os.chdir(LLAMA_CPP_HOME)
-
-    llama_cpp_process = subprocess.Popen(
-        [LLAMA_CPP_PATH, "--model", GENERAL_MODEL_PATH, "--ctx-size", CONTEXT_WINDOW, "--port", str(LLAMA_PORT), "-np",
-         "2", "-ns", "1", "-ngl", "24", "-sm", "layer", "-ts", "0", "-mg", "-1"],
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE
-    )
+    command = [
+        LLAMA_CPP_PATH,
+        "--model", GENERAL_MODEL_PATH,
+        "--ctx-size", CONTEXT_WINDOW,
+        "--port", str(LLAMA_PORT),
+        "--host", HOST,
+        "-np", "2",
+        "-ns", "1",
+        "-ngl", "14",
+        "-sm", "layer",
+        "-ts", "0",
+        "-mg", "-1"
+    ]
+    # print(' '.join(command))
+    llama_cpp_process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     LLAMA_SERVER_PID = llama_cpp_process.pid
     print("LLAMA_SERVER_PID:", LLAMA_SERVER_PID)
 
     # Wait for the server to be ready
-    max_attempts = 10
+    max_attempts = 5
     wait_time = 2  # seconds
     server_ready = False
 
     for attempt in range(max_attempts):
         time.sleep(wait_time)
         try:
-            with socket.create_connection(('localhost', LLAMA_PORT), timeout=1):
+            response = requests.get(f"http://{HOST}:{LLAMA_PORT}/health", timeout=3)
+            if response.status_code == 200:
                 print(f"Connection to llama-server on port {LLAMA_PORT} successful.")
-                server_ready = True
                 break
-        except (ConnectionRefusedError, socket.timeout) as e:
-            print(f"Attempt {attempt + 1}: Connection to llama-server on port {LLAMA_PORT} failed. Retrying...")
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout, requests.exceptions.HTTPError) as e:
+            print(f"Attempt {attempt + 1}: Connection to llama-server on port http://{HOST}:{LLAMA_PORT}/health failed. Retrying...")
+            if attempt == max_attempts - 1:
+                raise Exception(
+                    f"Could not start llama-server.\n\nERROR:\n\n{llama_cpp_process.communicate()[1].decode('utf-8')}")
             continue
-
-    if not server_ready:
-        print(f"Error: llama-server did not start within the expected time. {llama_cpp_process.communicate()[0].decode('utf-8')}")
-        raise Exception("Could not start llama-server.")
         # You may choose to handle this error, raise an exception, or take other actions.
     # Change back to the original working directory
     os.chdir(cwd)
@@ -157,8 +169,26 @@ def start_llama_cpp():
 def stop_llama_cpp():
     global LLAMA_SERVER_PID
     if LLAMA_SERVER_PID:
-        os.kill(int(LLAMA_SERVER_PID), 9)  # Terminate the process
+        kill_process_on_port(LLAMA_PORT)
         LLAMA_SERVER_PID = None
+
+def kill_process_on_port(port):
+    # Iterate over all the network connections
+    for conn in psutil.net_connections():
+        if conn.laddr.port == port:
+            pid = conn.pid
+            if pid:
+                try:
+                    # Kill the process
+                    os.kill(pid, 9)
+                    print(f"Process {pid} on port {port} has been killed.")
+                except Exception as e:
+                    print(f"Failed to kill process {pid} on port {port}: {e}")
+            else:
+                print(f"No process found running on port {port}.")
+            return
+
+    print(f"No process found running on port {port}.")
 
 
 # Capture SIGTERM signal to stop llama-server
