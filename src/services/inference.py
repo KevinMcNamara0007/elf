@@ -1,5 +1,5 @@
 from src.utilities.general import classifications, CONTEXT_WINDOW
-from src.utilities.inference import classify_prompt, fetch_llama_cpp_response
+from src.utilities.inference import fetch_llama_cpp_response, classify_prompt
 
 
 async def get_all_models():
@@ -9,8 +9,8 @@ async def get_all_models():
 
 
 async def get_expert_response(rules, messages, temperature=.05, max_tokens=CONTEXT_WINDOW):
-    # key = await classify_prompt(messages[-1]["content"])
-    key = 1
+    key = await classify_prompt(messages[-1]["content"])
+    print("Classification: {}".format(classifications.get(key)["Category"]))
     # Fetch response
     cont_response = await fetch_llama_cpp_response(rules, messages, temperature, key, max_tokens)
     # Extract model response
@@ -52,5 +52,5 @@ async def get_expert_response(rules, messages, temperature=.05, max_tokens=CONTE
 
 
 async def prompt_classification(prompt):
-    return await classify_prompt(prompt)
+    return await classify_prompt(prompt, text=True)
 

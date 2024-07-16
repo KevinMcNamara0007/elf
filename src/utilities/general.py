@@ -4,9 +4,8 @@ import pickle
 import platform
 import subprocess
 import shutil
-import torch
 from dotenv import load_dotenv
-from tensorflow.keras.models import load_model
+import onnxruntime as ort
 import time
 import socket
 import requests
@@ -20,12 +19,9 @@ LLAMA_SERVER_PID = None
 load_dotenv(os.getenv("ENV", "config/.env-dev"))
 general_model_path = os.getenv("general")
 programming_model_path = os.getenv("programming")
-classifier_encoder = os.getenv("classifier_encoder")
 classifier_tokenizer = os.getenv("classifier_tokenizer")
 classifier_model = os.getenv("classifier_model")
 stt_model_path = os.getenv("stt_model_path")
-tts_model_path = os.getenv("tts_model_path")
-tts_config_path = os.getenv("tts_config_path")
 vision_model_path = os.getenv("vision_model_path")
 CONTEXT_WINDOW = os.getenv("CONTEXT_WINDOW")
 HOST = os.getenv("HOST")
@@ -38,7 +34,6 @@ GENERAL_MODEL_PATH = os.path.join(os.getcwd(), general_model_path)
 NUMBER_OF_CORES = multiprocessing.cpu_count()
 WORKERS = f"-j {NUMBER_OF_CORES - 2}" if NUMBER_OF_CORES > 2 else ""
 PLATFORM = platform.system()
-device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 
 stt_model_id = stt_model_path if os.path.exists(stt_model_path) else "openai/whisper-medium"
 
@@ -77,7 +72,7 @@ def compile_llama_cpp():
         os.chdir(LLAMA_CPP_HOME)
 
         # Configure CMake
-        gpu_support = "-DGGML_CUDA=ON"  # Adjust as needed based on your setup
+        gpu_support = "-DGGML_CUDA=ON" if platform.system() != "Darwin" else "-DLLAMA_USE_METAL=ON -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++" # Adjust as needed based on your setup
         try:
             source_command = subprocess.run(
                 ["cmake", "..", "-B", ".", "-S", LLAMA_SOURCE_FOLDER, gpu_support],
@@ -128,15 +123,15 @@ def start_llama_cpp():
     command = [
         LLAMA_CPP_PATH,
         "--model", GENERAL_MODEL_PATH,
-        "--ctx-size", CONTEXT_WINDOW,
+        "--ctx-size", str(CONTEXT_WINDOW),
         "--port", str(LLAMA_PORT),
         "--host", HOST,
-        "-np", "2",
-        "-ns", "1",
-        "-ngl", "14",
         "-sm", "layer",
-        "-ts", "0",
-        "-mg", "-1"
+        "-np", "2",  # Number of parallel processes
+        "-ns", "1",  # Number of streams
+        "-ngl", "24",  # Reduced number of GPU layers
+        "-ts", "0",  # Tensor split
+        "-mg", "-1",  # Memory growth,
     ]
     # print(' '.join(command))
     llama_cpp_process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -158,8 +153,9 @@ def start_llama_cpp():
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout, requests.exceptions.HTTPError) as e:
             print(f"Attempt {attempt + 1}: Connection to llama-server on port http://{HOST}:{LLAMA_PORT}/health failed. Retrying...")
             if attempt == max_attempts - 1:
-                raise Exception(
-                    f"Could not start llama-server.\n\nERROR:\n\n{llama_cpp_process.communicate()[1].decode('utf-8')}")
+                print(Exception(
+                    f"Could not start llama-server.\n\nERROR:\n\n{llama_cpp_process.communicate()[1].decode('utf-8')}"))
+                exit(1)
             continue
         # You may choose to handle this error, raise an exception, or take other actions.
     # Change back to the original working directory
@@ -203,12 +199,12 @@ def replace_port_in_url(url, new_port):
     return ":".join(parts)
 
 
-# Load the tokenizer (assuming it has been saved as instructed)
+# Load the tokenizer
 with open(classifier_tokenizer, 'rb') as handle:
     tokenizer = pickle.load(handle)
 
-# Load Classifier Model
-classifier = load_model(classifier_model)
+# Load the ONNX model
+classifier = ort.InferenceSession(classifier_model)
 
 # Available Classifications
 classifications = {

@@ -1,12 +1,7 @@
-import os
-
+import numpy as np
 import requests
-import time
-from PIL import Image
 from fastapi import HTTPException
-from src.utilities.general import (classifier, tokenizer, classifications, CONTEXT_WINDOW)
-#stt_pipe, vision_processor, device, vision_model, tts_model)
-from tensorflow.keras.preprocessing.sequence import pad_sequences
+from src.utilities.general import (classifications, CONTEXT_WINDOW, tokenizer, classifier)
 
 
 async def load_model(key):
@@ -18,35 +13,43 @@ async def load_model(key):
     return classifications.get(key)["Link"]
 
 
-async def classify_prompt(prompt, c_tokenizer=tokenizer, c_model=classifier, max_len=100):
+async def classify_prompt(prompt, max_len=100, text=False):
     """
     Get a classification class from a given prompt.
-    :param prompt:
-    :param c_tokenizer:
-    :param c_model:
-    :param max_len:
-    :return:
+    :param prompt: The prompt to classify.
+    :param max_len: Maximum sequence length (default: 100).
+    :param text: If True, the text is returned as a string.
+    :return: Index of the predicted class.
     """
     try:
-        # Tokenize the prompt
-        seq = c_tokenizer.texts_to_sequences([prompt])
-        print("tokenized: {0}".format(seq))
-        # Pad the sequence
-        padded = pad_sequences(seq, maxlen=max_len, padding='post')
-        print("padded: {0}".format(padded))
-        # Predict the category
-        prediction = c_model.predict(padded)[0]
-        print("prediction: {0}".format(prediction))
-        # Convert predictions to binary
-        binary_prediction = [0 if x < .49 else 1 for x in prediction]
-        print("bin prediction: {0}".format(binary_prediction))
-        # Check for ambiguity and go with safe model if found
-        if binary_prediction.count(1) > 1 or binary_prediction.count(1) < 1:
-            return 1
-        # Return index of max value in the list of predictions
-        return binary_prediction.index(max(binary_prediction))
+        # Tokenize prompt
+        input_tokens = tokenizer.texts_to_sequences([prompt])
+
+        # Pad input sequence
+        max_seq_length = max_len
+        input_tokens_padded = np.zeros((1, max_seq_length), dtype=np.float32)
+        input_tokens_padded[:, :len(input_tokens[0])] = input_tokens[0][:max_seq_length]
+
+        # Perform inference
+        inputs = {classifier.get_inputs()[0].name: input_tokens_padded}
+        prediction = classifier.run(None, inputs)[0]  # Retrieve the first output (assuming single output)
+
+        # Process prediction (assuming binary classification)
+        binary_prediction = [0 if x < 0.5 else 1 for x in prediction[0]]  # Assuming the first batch element
+
+        # Check for ambiguity and return result
+        if binary_prediction.count(1) != 1:
+            return 1  # Fallback to a default class (e.g., safe choice)
+
+        # Return index of the predicted class
+        if not text:
+            return binary_prediction.index(1)
+        # Return category of the predicted class
+        return classifications.get(binary_prediction.index(1))["Category"]
+
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=exc)
+        # Handle any exceptions during inference
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 async def fetch_expert_response(messages, temperature, key, max_tokens=CONTEXT_WINDOW):
