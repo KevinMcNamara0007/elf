@@ -52,47 +52,6 @@ async def classify_prompt(prompt, max_len=100, text=False):
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-async def fetch_expert_response(messages, temperature, key, max_tokens=CONTEXT_WINDOW):
-    """
-    Call one of the models depending on the given key, pass the messages and temperature to use the model in its
-    inference mode. Max tokens refers to the output tokens.
-    :param max_tokens:
-    :param messages:
-    :param temperature:
-    :param key:
-    :return:
-    """
-    try:
-        expert = await load_model(key)
-        return expert.create_chat_completion(
-            messages=messages,
-            temperature=temperature,
-            # max number of tokens to be generated
-            max_tokens=max_tokens
-        )
-    except ValueError as val_err:
-        print(val_err)
-        return {
-            "model": "efs/models/mistral-7b-instruct-v0.2.Q2_K.gguf",
-            "choices": [
-                {
-                    "message": {
-                        "role": "assistant",
-                        "content": "Input tokens exceed model limit"
-                    },
-                    "finish_reason": "exceed"
-                }
-            ],
-            "usage": {
-                "prompt_tokens": 8196,
-                "completion_tokens": 0,
-                "total_tokens": 8196
-            }
-        }
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Could not fetch response from model: {exc}")
-
-
 async def fetch_llama_cpp_response(rules, messages, temperature, key, max_tokens=CONTEXT_WINDOW):
     prompt = rules
     for message in messages:
@@ -109,7 +68,7 @@ async def fetch_llama_cpp_response(rules, messages, temperature, key, max_tokens
             "temperature": temperature,
             "stop": [
                 "<|start_header_id|>user", "<|start_footer_id|>", "<|end_user|>", "<|start_header_id|>assistant",
-                "<|eot_id|>"
+                "<|eot_id|>", "<|im_end|>"
             ]
             # Note the corrected temperature value
         }
