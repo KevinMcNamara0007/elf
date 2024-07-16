@@ -52,7 +52,7 @@ async def classify_prompt(prompt, max_len=100, text=False):
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-async def fetch_llama_cpp_response(rules, messages, temperature, key, max_tokens=CONTEXT_WINDOW-INPUT_WINDOW):
+async def fetch_llama_cpp_response(rules, messages, temperature, key, max_tokens=int(CONTEXT_WINDOW)-INPUT_WINDOW):
     prompt = rules
     for message in messages:
         if message["role"] == "assistant":
