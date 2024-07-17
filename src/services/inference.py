@@ -1,3 +1,5 @@
+import math
+
 from src.utilities.general import classifications, CONTEXT_WINDOW, INPUT_WINDOW
 from src.utilities.inference import fetch_llama_cpp_response, classify_prompt
 
@@ -8,11 +10,13 @@ async def get_all_models():
             in classifications.values()]
 
 
-async def get_expert_response(rules, messages, temperature=.05, max_tokens=int(CONTEXT_WINDOW)-INPUT_WINDOW):
+async def get_expert_response(rules, messages, temperature=.05, max_tokens=int(CONTEXT_WINDOW)-int(INPUT_WINDOW)):
     key = await classify_prompt(messages[-1]["content"])
     print("Classification: {}".format(classifications.get(key)["Category"]))
+    rough_token_count = int(math.ceil(len(str(rules) + str(messages)) / 5))
+    print("Rough token count: {}".format(rough_token_count))
     # Fetch response
-    cont_response = await fetch_llama_cpp_response(rules, messages, temperature, key, max_tokens)
+    cont_response = await fetch_llama_cpp_response(rules, messages, temperature, key, rough_token_count)
     # Extract model response
     final_response = cont_response['content']
     # Extract other useful data from original response
@@ -27,7 +31,7 @@ async def get_expert_response(rules, messages, temperature=.05, max_tokens=int(C
             {'role': 'User', 'content': f"Please continue the response. ORIGINAL PROMPT: {messages[-1]['content']}"},
             {'role': 'assistant', 'content': final_response}
         ]
-        cont_response = await fetch_llama_cpp_response(continuation_prompt, temperature, key, max_tokens)
+        cont_response = await fetch_llama_cpp_response(continuation_prompt, temperature, key, c_tokens)
         finish_reason = cont_response['truncated']
         final_response += " " + cont_response['content']
 

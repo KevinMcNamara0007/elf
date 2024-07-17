@@ -1,3 +1,4 @@
+import json
 import math
 
 import numpy as np
@@ -54,20 +55,19 @@ async def classify_prompt(prompt, max_len=100, text=False):
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-async def fetch_llama_cpp_response(rules, messages, temperature, key, max_tokens=CONTEXT_WINDOW):
+async def fetch_llama_cpp_response(rules, messages, temperature, key, input_tokens=4000):
     compiled_messages = []
     try:
         expert = await load_model(key)
         compiled_messages.append(rules)
         compiled_messages.extend(messages)
-        formatted_messages = str(compiled_messages) + '<|im_start|>assistant'
+        compiled_messages.append({'role': 'assistant', 'content': ""})
         payload = {
-            "prompt": formatted_messages,
-            "n_predict": -1,
+            "prompt": json.dumps(compiled_messages),
             "temperature": temperature,
+            "n_predict": int(CONTEXT_WINDOW) - input_tokens,
             "stop": [
-                "<|im_start|>user", "<|start_footer_id|>", "<|end_user|>", "<|im_start|>assistant",
-                "<|eot_id|>", "<|im_end|>"
+                "<|im_end|>"
             ]
         }
         expert_response = requests.post(expert, json=payload)

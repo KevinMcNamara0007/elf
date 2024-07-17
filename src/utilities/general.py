@@ -125,13 +125,10 @@ def start_llama_cpp():
         LLAMA_CPP_PATH,
         "--model", GENERAL_MODEL_PATH,
         "--ctx-size", CONTEXT_WINDOW,
-        "--predict", "-2",
         "--port", str(LLAMA_PORT),
         "--host", HOST,
         "-sm", "layer",
-        "-np", "1",  # Number of parallel processes
-        "-ns", "1",  # Number of streams
-        "-ngl", "24",  # Reduced number of GPU layers
+        "-ngl", "-1",  # Reduced number of GPU layers
         "-ts", "0",  # Tensor split
         "-mg", "-1",  # Main gpu,
     ]
