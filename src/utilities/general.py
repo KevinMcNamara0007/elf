@@ -142,22 +142,22 @@ def start_llama_cpp():
     # Wait for the server to be ready
     max_attempts = 5
     wait_time = 2  # seconds
-    server_ready = False
 
-    for attempt in range(max_attempts):
-        time.sleep(wait_time)
-        try:
-            response = requests.get(f"http://{HOST}:{LLAMA_PORT}/health", timeout=3)
-            if response.status_code == 200:
-                print(f"Connection to llama-server on port {LLAMA_PORT} successful.")
-                break
-        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout, requests.exceptions.HTTPError) as e:
-            print(f"Attempt {attempt + 1}: Connection to llama-server on port http://{HOST}:{LLAMA_PORT}/health failed. Retrying...")
-            if attempt == max_attempts - 1:
-                print(Exception(
-                    f"Could not start llama-server.\n\nERROR:\n\n{llama_cpp_process.communicate()[1].decode('utf-8')}"))
-                exit(1)
-            continue
+    if PLATFORM != "Windows":
+        for attempt in range(max_attempts):
+            time.sleep(wait_time)
+            try:
+                response = requests.get(f"http://{HOST}:{LLAMA_PORT}/health", timeout=3)
+                if response.status_code == 200:
+                    print(f"Connection to llama-server on port {LLAMA_PORT} successful.")
+                    break
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout, requests.exceptions.HTTPError) as e:
+                print(f"Attempt {attempt + 1}: Connection to llama-server on port http://{HOST}:{LLAMA_PORT}/health failed. Retrying...")
+                if attempt == max_attempts - 1:
+                    print(Exception(
+                        f"Could not start llama-server.\n\nERROR:\n\n{llama_cpp_process.communicate()[1].decode('utf-8')}"))
+                    exit(1)
+                continue
         # You may choose to handle this error, raise an exception, or take other actions.
     # Change back to the original working directory
     os.chdir(cwd)
