@@ -10,13 +10,12 @@ async def get_all_models():
             in classifications.values()]
 
 
-async def get_expert_response(rules, messages, temperature=.05, max_tokens=int(CONTEXT_WINDOW)-int(INPUT_WINDOW)):
+async def get_expert_response(messages, temperature=.05, max_tokens=int(CONTEXT_WINDOW)-int(INPUT_WINDOW)):
     key = await classify_prompt(messages[-1]["content"])
     print("Classification: {}".format(classifications.get(key)["Category"]))
-    rough_token_count = int(math.ceil(len(str(rules) + str(messages)) / 5))
-    print("Rough token count: {}".format(rough_token_count))
+    rough_token_count = int(math.ceil(len(str(messages)) / 5))
     # Fetch response
-    cont_response = await fetch_llama_cpp_response(rules, messages, temperature, key, rough_token_count)
+    cont_response = await fetch_llama_cpp_response(messages, temperature, key, rough_token_count)
     # Extract model response
     final_response = cont_response['content']
     # Extract other useful data from original response

@@ -35,10 +35,11 @@ async def ask_an_expert(
 ):
     history = []
     rules = json.loads(rules)
+    history.append(rules)
     # Validate and parse the messages
     if messages:
         try:
-            history = json.loads(messages)
+            history.extend(json.loads(messages))
             if not isinstance(history, list):
                 raise HTTPException(status_code=400, detail="Messages must be a list of dictionaries.")
             for message in history:
@@ -49,12 +50,10 @@ async def ask_an_expert(
 
     if prompt:
         history.append({"role": "User", "content": prompt})
-
     if not messages and not prompt:
         raise HTTPException(status_code=400, detail="Provide Messages, Prompt or both.")
 
     return await get_expert_response(
-        rules=rules,
         messages=history,
         temperature=temperature,
         max_tokens=max_output_tokens

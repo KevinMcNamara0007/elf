@@ -128,9 +128,10 @@ def start_llama_cpp():
         "--port", str(LLAMA_PORT),
         "--host", HOST,
         "-sm", "layer",
-        "-ngl", "-1",  # Reduced number of GPU layers
+        "-ngl", "24",  # Reduced number of GPU layers
         "-ts", "0",  # Tensor split
         "-mg", "-1",  # Main gpu,
+        "--chat-template", "chatml"
     ]
     # print(' '.join(command))
     llama_cpp_process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
