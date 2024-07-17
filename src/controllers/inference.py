@@ -27,21 +27,25 @@ async def ask_an_expert(
         messages: str = Form(default=None, description="Chat style prompting"),
         prompt: str = Form(default=None, description="The prompt you want answered."),
         temperature: float = Form(default=0.05, description="Temperature of the model."),
-        rules: str = Form(default=f"<|start_header_id|>system<|end_header_id|>\n\n"
-                                  f"You are a friendly virtual assistant."
-                                  f"Your role is to answer the user's questions and follow their instructions."
-                                  f"Be concise and accurate when responding to the user's requests."
-                                  f"<|eot_id|>", description="Rules of the model."),
+        rules: str = Form(default="""{
+            "role": "system", "content": "You are a friendly virtual assistant. Your role is to answer the user's "
+                                         "questions and follow their instructions. Be concise and accurate."}""",
+                          description="Rules of the model."),
         max_output_tokens: int = Form(default=2000)
 ):
     history = []
+    rules = json.loads(rules)
+    # Validate and parse the messages
     if messages:
         try:
             history = json.loads(messages)
             if not isinstance(history, list):
                 raise HTTPException(status_code=400, detail="Messages must be a list of dictionaries.")
-        except json.JSONDecodeError:
-            raise HTTPException(status_code=400, detail="Invalid JSON format for messages.")
+            for message in history:
+                if not isinstance(message, dict) or 'role' not in message or 'content' not in message:
+                    raise HTTPException(status_code=400, detail="Each message must be a dictionary with 'role' and 'content' keys.")
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid JSON format for messages. {exc}")
 
     if prompt:
         history.append({"role": "User", "content": prompt})

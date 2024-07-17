@@ -124,15 +124,16 @@ def start_llama_cpp():
     command = [
         LLAMA_CPP_PATH,
         "--model", GENERAL_MODEL_PATH,
-        "--ctx-size", str(CONTEXT_WINDOW),
+        "--ctx-size", CONTEXT_WINDOW,
+        "--predict", "-2",
         "--port", str(LLAMA_PORT),
         "--host", HOST,
         "-sm", "layer",
-        "-np", "2",  # Number of parallel processes
+        "-np", "1",  # Number of parallel processes
         "-ns", "1",  # Number of streams
         "-ngl", "24",  # Reduced number of GPU layers
         "-ts", "0",  # Tensor split
-        "-mg", "-1",  # Memory growth,
+        "-mg", "-1",  # Main gpu,
     ]
     # print(' '.join(command))
     llama_cpp_process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)

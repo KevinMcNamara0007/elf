@@ -1,7 +1,9 @@
+import math
+
 import numpy as np
 import requests
 from fastapi import HTTPException
-from src.utilities.general import (classifications, CONTEXT_WINDOW, tokenizer, classifier, INPUT_WINDOW)
+from src.utilities.general import (classifications, CONTEXT_WINDOW, tokenizer, classifier)
 
 
 async def load_model(key):
@@ -52,25 +54,21 @@ async def classify_prompt(prompt, max_len=100, text=False):
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-async def fetch_llama_cpp_response(rules, messages, temperature, key, max_tokens=int(CONTEXT_WINDOW)-INPUT_WINDOW):
-    prompt = rules
-    for message in messages:
-        if message["role"] == "assistant":
-            line = f"<|start_header_id|>system<|end_header_id|>\n\n{message['content']}<|eot_id|>"
-        else:
-            line = f"<|start_header_id|>user<|end_header_id|>\n\n{message['content']}<|eot_id|>"
-        prompt += line
+async def fetch_llama_cpp_response(rules, messages, temperature, key, max_tokens=CONTEXT_WINDOW):
+    compiled_messages = []
     try:
         expert = await load_model(key)
+        compiled_messages.append(rules)
+        compiled_messages.extend(messages)
+        formatted_messages = str(compiled_messages) + '<|im_start|>assistant'
         payload = {
-            "prompt": prompt,
-            "n_predict": max_tokens,
+            "prompt": formatted_messages,
+            "n_predict": -1,
             "temperature": temperature,
             "stop": [
-                "<|start_header_id|>user", "<|start_footer_id|>", "<|end_user|>", "<|start_header_id|>assistant",
+                "<|im_start|>user", "<|start_footer_id|>", "<|end_user|>", "<|im_start|>assistant",
                 "<|eot_id|>", "<|im_end|>"
             ]
-            # Note the corrected temperature value
         }
         expert_response = requests.post(expert, json=payload)
         expert_response.raise_for_status()
