@@ -27,14 +27,12 @@ async def ask_an_expert(
         messages: str = Form(default=None, description="Chat style prompting"),
         prompt: str = Form(default=None, description="The prompt you want answered."),
         temperature: float = Form(default=0.05, description="Temperature of the model."),
-        rules: str = Form(default="""{
-            "role": "system", "content": "You are a friendly virtual assistant. Your role is to answer the user's "
-                                         "questions and follow their instructions. Be concise and accurate."}""",
+        rules: str = Form(default="You are a friendly virtual assistant. Your role is to answer the user questions and follow their instructions. Be concise and accurate.",
                           description="Rules of the model."),
         max_output_tokens: int = Form(default=2000)
 ):
     history = []
-    rules = json.loads(rules)
+    rules = {"role": "system", "content": rules}
     history.append(rules)
     # Validate and parse the messages
     if messages:

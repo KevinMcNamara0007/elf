@@ -58,7 +58,6 @@ async def classify_prompt(prompt, max_len=100, text=False):
 async def fetch_llama_cpp_response(messages, temperature, key, input_tokens=4000):
     try:
         expert = await load_model(key)
-        messages.append({'role': 'assistant', 'content': " "})
         payload = {
             "prompt": json.dumps(messages),
             "temperature": temperature,

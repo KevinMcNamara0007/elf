@@ -73,7 +73,7 @@ def compile_llama_cpp():
         os.chdir(LLAMA_CPP_HOME)
 
         # Configure CMake
-        gpu_support = "-DGGML_CUDA=ON" if platform.system() != "Darwin" else "-DLLAMA_USE_METAL=ON -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++" # Adjust as needed based on your setup
+        gpu_support = "-DGGML_CUDA=ON" if platform.system() != "Darwin" else "-DLLAMA_METAL=ON" # Adjust as needed based on your setup
         try:
             source_command = subprocess.run(
                 ["cmake", "..", "-B", ".", "-S", LLAMA_SOURCE_FOLDER, gpu_support],
@@ -129,7 +129,6 @@ def start_llama_cpp():
         "--host", HOST,
         "-sm", "layer",
         "-ngl", "24",  # Reduced number of GPU layers
-        "-ts", "0",  # Tensor split
         "-mg", "-1",  # Main gpu,
         "--chat-template", "chatml"
     ]
