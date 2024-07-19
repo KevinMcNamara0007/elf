@@ -73,7 +73,7 @@ def compile_llama_cpp():
         os.chdir(LLAMA_CPP_HOME)
 
         # Configure CMake
-        gpu_support = "-DGGML_CUDA=ON" if platform.system() != "Darwin" else "-DLLAMA_METAL=ON" # Adjust as needed based on your setup
+        gpu_support = "-DGGML_CUDA=ON" if platform.system() != "Darwin" else "" # Adjust as needed based on your setup
         try:
             source_command = subprocess.run(
                 ["cmake", "..", "-B", ".", "-S", LLAMA_SOURCE_FOLDER, gpu_support],
@@ -131,6 +131,12 @@ def start_llama_cpp():
         "-ngl", "24",  # Reduced number of GPU layers
         "-mg", "-1",  # Main gpu,
         "--chat-template", "chatml"
+    ] if platform.system() != "Darwin" else [
+        LLAMA_CPP_PATH,
+        "--port", str(LLAMA_PORT),
+        "--ctx-size", CONTEXT_WINDOW,
+        "--gpu-layers", "32",
+        "--model", "/opt/models/mistral.gguf"
     ]
     # print(' '.join(command))
     llama_cpp_process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
