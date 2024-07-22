@@ -68,7 +68,11 @@ async def fetch_llama_cpp_response(messages, temperature, key, input_tokens=4000
         }
         expert_response = requests.post(expert, json=payload)
         expert_response.raise_for_status()
-        return expert_response.json()
+        expert_response = expert_response.json()
+        expert_response['content'] = (
+            expert_response['content'].replace('<|im_start|> assistant', '').replace('<|im_start|>assistant', '')
+        )
+        return expert_response
     except Exception as exc:
         print(str(exc))
         raise HTTPException(status_code=500, detail=f"Could not fetch response from llama.cpp: {exc}")
