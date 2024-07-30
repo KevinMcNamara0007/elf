@@ -134,6 +134,8 @@ def start_llama_cpp():
         "-ngl", GPU_LAYERS,  # Number of GPU layers
         "-mg", MAIN_GPU_INDEX,  # Main gpu,
         "--threads", str(NUMBER_OF_CORES), # Allowable threads for CPU operations
+        "--batch-size", "8192",# logical maximum batch size (default: 2048)
+        "--ubatch-size", "1024",# physical maximum batch size (default: 512)
         "--conversation",
     ] if platform.system() != "Darwin" else [
         LLAMA_CPP_PATH,
@@ -142,6 +144,8 @@ def start_llama_cpp():
         "--gpu-layers", GPU_LAYERS,
         "--model", GENERAL_MODEL_PATH,
         "--threads", str(NUMBER_OF_CORES),  # Allowable threads for CPU operations
+        "--batch-size", "8192",# logical maximum batch size (default: 2048)
+        "--ubatch-size", "1024",# physical maximum batch size (default: 512)
         "--conversation"
     ]
     llama_cpp_process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
