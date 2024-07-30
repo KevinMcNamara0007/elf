@@ -35,6 +35,8 @@ GENERAL_MODEL_PATH = os.path.join(os.getcwd(), general_model_path)
 NUMBER_OF_CORES = multiprocessing.cpu_count()
 WORKERS = f"-j {NUMBER_OF_CORES - 2}" if NUMBER_OF_CORES > 2 else ""
 PLATFORM = platform.system()
+GPU_LAYERS = os.getenv("GPU_LAYERS")
+MAIN_GPU_INDEX = os.getenv("MAIN_GPU_INDEX")
 
 stt_model_id = stt_model_path if os.path.exists(stt_model_path) else "openai/whisper-medium"
 
@@ -129,18 +131,19 @@ def start_llama_cpp():
         "--port", str(LLAMA_PORT),
         "--host", HOST,
         "-sm", "layer",
-        "-ngl", "24",  # Reduced number of GPU layers
-        "-mg", "-1",  # Main gpu,
-        "--conversation"
+        "-ngl", GPU_LAYERS,  # Number of GPU layers
+        "-mg", MAIN_GPU_INDEX,  # Main gpu,
+        "--threads", str(NUMBER_OF_CORES), # Allowable threads for CPU operations
+        "--conversation",
     ] if platform.system() != "Darwin" else [
         LLAMA_CPP_PATH,
         "--port", str(LLAMA_PORT),
         "--ctx-size", CONTEXT_WINDOW,
-        "--gpu-layers", "32",
-        "--model", "/opt/models/mistral.gguf",
+        "--gpu-layers", GPU_LAYERS,
+        "--model", GENERAL_MODEL_PATH,
+        "--threads", str(NUMBER_OF_CORES),  # Allowable threads for CPU operations
         "--conversation"
     ]
-    # print(' '.join(command))
     llama_cpp_process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     LLAMA_SERVER_PID = llama_cpp_process.pid
     print("LLAMA_SERVER_PID:", LLAMA_SERVER_PID)

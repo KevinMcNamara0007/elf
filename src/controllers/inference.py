@@ -29,7 +29,8 @@ async def ask_an_expert(
         temperature: float = Form(default=0.05, description="Temperature of the model."),
         rules: str = Form(default="You are a friendly virtual assistant. Your role is to answer the user questions and follow their instructions. Be concise and accurate.",
                           description="Rules of the model."),
-        max_output_tokens: int = Form(default=2000)
+        top_k: int = Form(default=40),
+        top_p: float = Form(default=0.95)
 ):
     history = []
     # Validate and parse the messages
@@ -53,7 +54,8 @@ async def ask_an_expert(
         rules=rules,
         messages=history,
         temperature=temperature,
-        max_tokens=max_output_tokens
+        top_k=top_k,
+        top_p=top_p,
     )
 
 
