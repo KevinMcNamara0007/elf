@@ -55,15 +55,18 @@ async def classify_prompt(prompt, max_len=100, text=False):
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-async def fetch_llama_cpp_response(messages, temperature, key, input_tokens=4000):
+async def fetch_llama_cpp_response(rules, messages, temperature, key, input_tokens=4000):
     try:
         expert = await load_model(key)
         payload = {
             "prompt": json.dumps(messages),
             "temperature": temperature,
             "n_predict": int(CONTEXT_WINDOW) - input_tokens,
+            "system_prompt": rules,
             "stop": [
-                "<|im_end|>"
+                "<|im_end|>",
+                "</s>",
+                "<end_of_turn>"
             ]
         }
         expert_response = requests.post(expert, json=payload)

@@ -121,6 +121,7 @@ def start_llama_cpp():
     # Change working directory to LLAMA_CPP_HOME for starting llama-server
     cwd = os.getcwd()
     os.chdir(LLAMA_CPP_HOME)
+    prompt = "You are a helpful and friendly digital assistant."
     command = [
         LLAMA_CPP_PATH,
         "--model", GENERAL_MODEL_PATH,
@@ -130,13 +131,14 @@ def start_llama_cpp():
         "-sm", "layer",
         "-ngl", "24",  # Reduced number of GPU layers
         "-mg", "-1",  # Main gpu,
-        "--chat-template", "chatml"
+        "--conversation"
     ] if platform.system() != "Darwin" else [
         LLAMA_CPP_PATH,
         "--port", str(LLAMA_PORT),
         "--ctx-size", CONTEXT_WINDOW,
         "--gpu-layers", "32",
-        "--model", "/opt/models/mistral.gguf"
+        "--model", "/opt/models/mistral.gguf",
+        "--conversation"
     ]
     # print(' '.join(command))
     llama_cpp_process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)

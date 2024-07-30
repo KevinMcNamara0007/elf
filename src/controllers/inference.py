@@ -32,8 +32,6 @@ async def ask_an_expert(
         max_output_tokens: int = Form(default=2000)
 ):
     history = []
-    rules = {"role": "system", "content": rules}
-    history.append(rules)
     # Validate and parse the messages
     if messages:
         try:
@@ -52,6 +50,7 @@ async def ask_an_expert(
         raise HTTPException(status_code=400, detail="Provide Messages, Prompt or both.")
 
     return await get_expert_response(
+        rules=rules,
         messages=history,
         temperature=temperature,
         max_tokens=max_output_tokens
