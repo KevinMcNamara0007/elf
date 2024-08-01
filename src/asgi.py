@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException
 from starlette.responses import RedirectResponse
 
-from src.controllers import inference  #, images
+from src.controllers import inference
 from src.utilities.exception_handlers import request_validation_exception_handler, http_exception_handler, \
     unhandled_exception_handler
 from log_management.middleware import log_request_middleware

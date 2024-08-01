@@ -9,10 +9,11 @@ cffi~=1.16.0
 typing_extensions~=4.11.0
 numpy~=1.26.4
 tqdm~=4.66.4
-yaml~=0.2.5
-pyyaml~=6.0.1
+yaml
+pyyaml
 aiohttp~=3.9.5
 pydantic~=2.8.2
 onnxruntime~=1.18.1
 psutil~=6.0.0
 onnx~=1.16.1
+httpx

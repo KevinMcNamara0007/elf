@@ -61,6 +61,6 @@ async def get_expert_response(rules, messages, temperature=.05, top_k=40, top_p=
     }
 
 
-async def prompt_classification(prompt):
-    return await classify_prompt(prompt, text=True)
+def prompt_classification(prompt):
+    return classify_prompt(prompt, text=True)
 

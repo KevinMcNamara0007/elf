@@ -31,12 +31,17 @@ LLAMA_CPP_HOME = os.getenv("LLAMA_CPP_HOME")
 LLAMA_SOURCE_FOLDER = os.path.join(os.getcwd(), os.getenv("LLAMA_SOURCE_FOLDER"))
 LLAMA_PORT = int(UVICORN_PORT) + 1
 LLAMA_CPP_ENDPOINT = f"http://{HOST}:{LLAMA_PORT}/completion"
+MAIN_GPU_INDEX = os.getenv("MAIN_GPU_INDEX")
 GENERAL_MODEL_PATH = os.path.join(os.getcwd(), general_model_path)
 NUMBER_OF_CORES = multiprocessing.cpu_count()
 WORKERS = f"-j {NUMBER_OF_CORES - 2}" if NUMBER_OF_CORES > 2 else ""
 PLATFORM = platform.system()
 GPU_LAYERS = os.getenv("GPU_LAYERS")
-MAIN_GPU_INDEX = os.getenv("MAIN_GPU_INDEX")
+NUMBER_OF_SERVERS=int(os.getenv("NUMBER_OF_SERVERS"))
+BATCH_SIZE=int(os.getenv("BATCH_SIZE"))
+UBATCH_SIZE=int(os.getenv("UBATCH_SIZE"))
+
+LLAMA_CPP_ENDPOINTS = []
 
 stt_model_id = stt_model_path if os.path.exists(stt_model_path) else "openai/whisper-medium"
 
@@ -112,74 +117,72 @@ def check_possible_paths():
 
 
 def start_llama_cpp():
+    global LLAMA_SERVER_PID
     # Ensure llama.cpp repository exists
     ensure_llama_cpp_repository()
     kill_process_on_port(LLAMA_PORT)
     # Compile the folder
     compile_llama_cpp()
-    global LLAMA_SERVER_PID
-
-
     # Change working directory to LLAMA_CPP_HOME for starting llama-server
     cwd = os.getcwd()
     os.chdir(LLAMA_CPP_HOME)
-    prompt = "You are a helpful and friendly digital assistant."
-    command = [
-        LLAMA_CPP_PATH,
-        "--model", GENERAL_MODEL_PATH,
-        "--ctx-size", CONTEXT_WINDOW,
-        "--port", str(LLAMA_PORT),
-        "--host", HOST,
-        "-sm", "layer",
-        "-ngl", GPU_LAYERS,  # Number of GPU layers
-        "-mg", MAIN_GPU_INDEX,  # Main gpu,
-        "--threads", str(NUMBER_OF_CORES), # Allowable threads for CPU operations
-        "--batch-size", "8192",# logical maximum batch size (default: 2048)
-        "--ubatch-size", "1024",# physical maximum batch size (default: 512)
-        "--conversation",
-    ] if platform.system() != "Darwin" else [
-        LLAMA_CPP_PATH,
-        "--port", str(LLAMA_PORT),
-        "--ctx-size", CONTEXT_WINDOW,
-        "--gpu-layers", GPU_LAYERS,
-        "--model", GENERAL_MODEL_PATH,
-        "--threads", str(NUMBER_OF_CORES),  # Allowable threads for CPU operations
-        "--batch-size", "8192",# logical maximum batch size (default: 2048)
-        "--ubatch-size", "1024",# physical maximum batch size (default: 512)
-        "--conversation"
-    ]
-    llama_cpp_process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    LLAMA_SERVER_PID = llama_cpp_process.pid
-    print("LLAMA_SERVER_PID:", LLAMA_SERVER_PID)
-
-    # Wait for the server to be ready
-    max_attempts = 5
-    wait_time = 2  # seconds
-
-    if PLATFORM != "Windows":
-        for attempt in range(max_attempts):
-            time.sleep(wait_time)
-            try:
-                response = requests.get(f"http://{HOST}:{LLAMA_PORT}/health", timeout=3)
-                if response.status_code == 200:
-                    print(f"Connection to llama-server on port {LLAMA_PORT} successful.")
-                    break
-            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout, requests.exceptions.HTTPError) as e:
-                print(f"Attempt {attempt + 1}: Connection to llama-server on port http://{HOST}:{LLAMA_PORT}/health failed. Retrying...")
-                if attempt == max_attempts - 1:
-                    print(Exception(
-                        f"Could not start llama-server.\n\nERROR:\n\n{llama_cpp_process.communicate()[1].decode('utf-8')}"))
-                    exit(1)
-                continue
-        # You may choose to handle this error, raise an exception, or take other actions.
+    # spin up x number of servers
+    processes_ports = spin_up_server(number_of_servers=NUMBER_OF_SERVERS)
+    # check health of all servers
+    check_server_health(processes_ports)
+    LLAMA_SERVER_PID = processes_ports
+    # Create a list of available servers
+    for process_port in processes_ports:
+        LLAMA_CPP_ENDPOINTS.append(f"http://{HOST}:{process_port[1]}")
     # Change back to the original working directory
     os.chdir(cwd)
+
+def check_server_health(pids_ports):
+    if PLATFORM != "Windows":
+        # Wait for the server to be ready
+        max_attempts = 5
+        wait_time = 2  # seconds
+        for process_port in pids_ports:
+            for attempt in range(max_attempts):
+                time.sleep(wait_time)
+                try:
+                    response = requests.get(f"http://{HOST}:{process_port[1]}/health", timeout=3)
+                    if response.status_code == 200:
+                        print(f"Connection to llama-server pid#{process_port[0].pid} on port#{process_port[1]} successful.")
+                        break
+                except (requests.exceptions.ConnectionError, requests.exceptions.Timeout, requests.exceptions.HTTPError) as e:
+                    print(f"Attempt {attempt + 1}: Connection to llama-server on port http://{HOST}:{process_port[1]}/health failed. Retrying...")
+                    if attempt == max_attempts - 1:
+                        print(Exception(
+                            f"Could not start llama-server.\n\nERROR:\n\n{process_port[0].communicate()[1].decode('utf-8')}"))
+                        exit(1)
+                    continue
+
+def spin_up_server(number_of_servers):
+    processes_ports = []
+    for i in range(number_of_servers):
+        PORT = LLAMA_PORT + i
+        command = [
+            LLAMA_CPP_PATH,
+            "--host", HOST,
+            "--port", str(PORT),
+            "--model", GENERAL_MODEL_PATH,
+            "--ctx-size", CONTEXT_WINDOW,
+            "--gpu-layers", GPU_LAYERS if number_of_servers == 1 else str(int(GPU_LAYERS)//number_of_servers),  # Number of GPU layers
+            "--threads", str(NUMBER_OF_CORES) if number_of_servers == 1 else str(NUMBER_OF_CORES//number_of_servers),  # Allowable threads for CPU operations
+            "--batch-size", str(BATCH_SIZE) if number_of_servers == 1 else str(BATCH_SIZE//number_of_servers),  # logical maximum batch size (default: 2048)
+            "--ubatch-size", str(UBATCH_SIZE) if number_of_servers == 1 else str(UBATCH_SIZE//number_of_servers),  # physical maximum batch size (default: 512)
+            "--conversation",
+        ]
+        processes_ports.append((subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE), PORT))
+    return processes_ports
 
 
 def stop_llama_cpp():
     global LLAMA_SERVER_PID
     if LLAMA_SERVER_PID:
-        kill_process_on_port(LLAMA_PORT)
+        for pid_port in LLAMA_SERVER_PID:
+            kill_process_on_port(pid_port[1])
         LLAMA_SERVER_PID = None
 
 def kill_process_on_port(port):
@@ -222,10 +225,9 @@ classifier = ort.InferenceSession(classifier_model)
 
 # Available Classifications
 classifications = {
-    0: {"Model": GENERAL_MODEL_PATH, "Category": "code", "Link": replace_port_in_url(LLAMA_CPP_ENDPOINT, LLAMA_PORT)},
-    1: {"Model": GENERAL_MODEL_PATH, "Category": "language",
-        "Link": replace_port_in_url(LLAMA_CPP_ENDPOINT, LLAMA_PORT)},
-    2: {"Model": GENERAL_MODEL_PATH, "Category": "math", "Link": replace_port_in_url(LLAMA_CPP_ENDPOINT, LLAMA_PORT)}
+    0: {"Model": GENERAL_MODEL_PATH, "Category": "code", "Link": LLAMA_CPP_ENDPOINTS},
+    1: {"Model": GENERAL_MODEL_PATH, "Category": "language", "Link": LLAMA_CPP_ENDPOINTS},
+    2: {"Model": GENERAL_MODEL_PATH, "Category": "math", "Link": LLAMA_CPP_ENDPOINTS},
 }
 
 

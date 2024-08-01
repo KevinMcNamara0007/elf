@@ -1,13 +1,15 @@
 import json
 import math
 
+import httpx
 import numpy as np
 import requests
 from fastapi import HTTPException
-from src.utilities.general import (classifications, CONTEXT_WINDOW, tokenizer, classifier)
+from src.utilities.general import (classifications, CONTEXT_WINDOW, tokenizer, classifier, LLAMA_CPP_ENDPOINTS,
+                                   NUMBER_OF_SERVERS)
 
 
-async def load_model(key):
+def load_model(key):
     """
     return a preloaded model given a key.
     :param key:
@@ -55,9 +57,15 @@ async def classify_prompt(prompt, max_len=100, text=False):
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+BALANCER_MAX_OPTION = NUMBER_OF_SERVERS
+CURRENT_BALANCER_SELECTION = 0
+
+
 async def fetch_llama_cpp_response(rules, messages, temperature, key, input_tokens=4000, top_k=40, top_p=0.95):
+    global BALANCER_MAX_OPTION
+    global CURRENT_BALANCER_SELECTION
     try:
-        expert = await load_model(key)
+        expert_urls = load_model(key)
         payload = {
             "prompt": json.dumps(messages),
             "temperature": temperature,
@@ -68,19 +76,40 @@ async def fetch_llama_cpp_response(rules, messages, temperature, key, input_toke
             "stop": [
                 "<|im_end|>",
                 "</s>",
-                "<end_of_turn>"
+                "<end_of_turn>",
+                '[{\"role\":'
             ]
         }
-        expert_response = requests.post(expert, json=payload)
-        expert_response.raise_for_status()
-        expert_response = expert_response.json()
-        expert_response['content'] = (
-            expert_response['content'].replace('<|im_start|> assistant', '').replace('<|im_start|>assistant', '')
+
+        expert_url = f"{expert_urls[CURRENT_BALANCER_SELECTION]}/completion"
+        CURRENT_BALANCER_SELECTION = (CURRENT_BALANCER_SELECTION + 1) % BALANCER_MAX_OPTION
+        async with httpx.AsyncClient(timeout=300) as client:
+            expert_response = await client.post(expert_url, json=payload)
+            expert_response.raise_for_status()
+            response_data = expert_response.json()
+
+        response_data['content'] = (
+            response_data['content'].replace(' assistant', '').replace('assistant', '').replace('<|im_start|>', '').replace('<|im_end|>', '')
         )
-        return expert_response
+        return response_data
+    except Exception as exc:
+        print("Response Error:", str(exc))
+        raise HTTPException(status_code=500, detail=f"Could not fetch response from llama.cpp: {exc.args}")
+
+
+def get_free_url(urls):
+    try:
+        free = None
+        while not free:
+            for url in urls:
+                req = requests.get(f"{url}/health")
+                response = req.json()
+                print(response)
+                free = None if response["status"] == "no slot available" else url
+        return f"{free}/completion"
     except Exception as exc:
         print(str(exc))
-        raise HTTPException(status_code=500, detail=f"Could not fetch response from llama.cpp: {exc}")
+        raise HTTPException(status_code=500, detail=str(exc))
 
 # async def audio_transcription(audiofile):
 #     try:
