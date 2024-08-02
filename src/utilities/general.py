@@ -40,27 +40,27 @@ GPU_LAYERS = os.getenv("GPU_LAYERS")
 NUMBER_OF_SERVERS=int(os.getenv("NUMBER_OF_SERVERS"))
 BATCH_SIZE=int(os.getenv("BATCH_SIZE"))
 UBATCH_SIZE=int(os.getenv("UBATCH_SIZE"))
-
+API_TOKENS = os.getenv("API_TOKENS")
+NO_TOKEN = "No Token was provided."
+API_TOKENS = API_TOKENS.split(",")
 LLAMA_CPP_ENDPOINTS = []
-
-stt_model_id = stt_model_path if os.path.exists(stt_model_path) else "openai/whisper-medium"
-
-# In case of Windows Run add .exe extension
-if PLATFORM == "Windows":
-    LLAMA_CPP_PATH = os.path.join(LLAMA_CPP_HOME, "bin/Release/llama-server.exe")
-else:
-    LLAMA_CPP_PATH = os.path.join(LLAMA_CPP_HOME, "bin/Release/llama-server")
+LLAMA_CPP_PATH = os.path.join(LLAMA_CPP_HOME, "bin/Release/llama-server")
 
 
 # Function to ensure llama.cpp repository exists
 def ensure_llama_cpp_repository():
-    # Check if Git repository exists and clone if it doesn't
+    """
+    Check if Git repository exists and clone if it doesn't
+    """
     if not os.path.exists(os.path.join(LLAMA_SOURCE_FOLDER, ".git")):
         remove_directory(LLAMA_SOURCE_FOLDER)
         subprocess.run(["git", "clone", "https://github.com/ggerganov/llama.cpp.git", LLAMA_SOURCE_FOLDER], check=True)
 
 
 def remove_directory(dir_path):
+    """
+    Remove a directory recursively
+    """
     if os.path.exists(dir_path):
         try:
             shutil.rmtree(dir_path)
@@ -70,6 +70,9 @@ def remove_directory(dir_path):
 
 
 def compile_llama_cpp():
+    """
+    Compiles the llama-server using cmake and GPU acceleration (if available)
+    """
     global LLAMA_CPP_PATH
     LLAMA_CPP_PATH = check_possible_paths()
     # Ensure LLAMA_CPP_HOME directory exists
@@ -107,6 +110,10 @@ def compile_llama_cpp():
 
 
 def check_possible_paths():
+    """
+    Check the possible paths of the llama-server
+    Inconsistencies across platforms are rectified in this method.
+    """
     global LLAMA_CPP_PATH
     if not os.path.exists(LLAMA_CPP_PATH):
         split_path = LLAMA_CPP_PATH.split("Release/")
@@ -117,10 +124,14 @@ def check_possible_paths():
 
 
 def start_llama_cpp():
+    """
+    Orchestrates the start of llama-server with all of its requirements
+    """
     global LLAMA_SERVER_PID
     # Ensure llama.cpp repository exists
     ensure_llama_cpp_repository()
-    kill_process_on_port(LLAMA_PORT)
+    for i in range(NUMBER_OF_SERVERS):
+        kill_process_on_port(LLAMA_PORT + i)
     # Compile the folder
     compile_llama_cpp()
     # Change working directory to LLAMA_CPP_HOME for starting llama-server
@@ -138,6 +149,9 @@ def start_llama_cpp():
     os.chdir(cwd)
 
 def check_server_health(pids_ports):
+    """
+    Check the health of the llama-servers
+    """
     if PLATFORM != "Windows":
         # Wait for the server to be ready
         max_attempts = 5
@@ -159,6 +173,9 @@ def check_server_health(pids_ports):
                     continue
 
 def spin_up_server(number_of_servers):
+    """
+    Starts up llama-server x (number_of_servers) with pre-configured params
+    """
     processes_ports = []
     for i in range(number_of_servers):
         PORT = LLAMA_PORT + i
@@ -179,6 +196,9 @@ def spin_up_server(number_of_servers):
 
 
 def stop_llama_cpp():
+    """
+    Kills all llama-servers
+    """
     global LLAMA_SERVER_PID
     if LLAMA_SERVER_PID:
         for pid_port in LLAMA_SERVER_PID:
@@ -186,6 +206,9 @@ def stop_llama_cpp():
         LLAMA_SERVER_PID = None
 
 def kill_process_on_port(port):
+    """
+    Kills a process on a given port
+    """
     # Iterate over all the network connections
     for conn in psutil.net_connections():
         if conn.laddr.port == port:
@@ -206,11 +229,17 @@ def kill_process_on_port(port):
 
 # Capture SIGTERM signal to stop llama-server
 def handle_sigterm(signum, frame):
+    """
+    Listens for SIGTERM and kills llama-servers
+    """
     stop_llama_cpp()
     exit(0)
 
 
 def replace_port_in_url(url, new_port):
+    """
+    Replaces port in a given url with new port
+    """
     parts = url.split(":")
     parts[-1] = str(new_port) + "/" + parts[-1].split("/")[-1]  # Replace the second last part (the port)
     return ":".join(parts)
@@ -230,101 +259,8 @@ classifications = {
     2: {"Model": GENERAL_MODEL_PATH, "Category": "math", "Link": LLAMA_CPP_ENDPOINTS},
 }
 
-
-# programming_expert = Llama(model_path=programming_model_path, n_gpu_layers=-1, n_ctx=2048)
-
-# # Load vision model
-# vision_model_id = vision_model_path if os.path.exists(vision_model_path) else "microsoft/Phi-3-vision-128k-instruct"
-#
-# vision_model = AutoModelForCausalLM.from_pretrained(
-#     vision_model_id,
-#     device_map=device,
-#     trust_remote_code=True,
-#     torch_dtype="auto",
-#     _attn_implementation="eager"  # use _attn_implementation='flash_attention_2' to enable flash attention
-# )
-#
-# vision_processor = AutoProcessor.from_pretrained(
-#     vision_model_id,
-#     trust_remote_code=True
-# )
-#
-# if not os.path.exists(vision_model_path):
-#     vision_model.save_pretrained(
-#         vision_model_path,
-#         is_main_process=True,
-#         save_functional=True,
-#         save_classif_head=True,
-#         save_tokenizer=True,
-#         save_shared=True,  # Ensure shared tensors are saved
-#         safe_serialization=False  # Bypass safety check for shared tensors
-#     )
-#     vision_processor.save_pretrained(
-#         vision_model_path,
-#         is_main_process=True,
-#         save_functional=True,
-#         save_classif_head=True,
-#         save_tokenizer=True,
-#         save_shared=True,  # Ensure shared tensors are saved
-#         safe_serialization=False  # Bypass safety check for shared tensors
-#     )
-
-# # Load Speech to Text Model
-# stt_model = AutoModelForSpeechSeq2Seq.from_pretrained(
-#     stt_model_id,
-#     low_cpu_mem_usage=True,
-#     use_safetensors=True
-# )
-# processor = AutoProcessor.from_pretrained(stt_model_id)
-#
-# # If stt model has not been saved, save it
-# if not os.path.exists(stt_model_path):
-#     stt_model.save_pretrained(stt_model_path)
-#     processor.save_pretrained(stt_model_path)
-#
-# # Send model to gpu or cpu device
-# stt_model.to(device)
-#
-# # Constrain the model to english language
-# stt_model.generation_config.language = "<|en|>"
-#
-# # Create the pipeline
-# stt_pipe = pipeline(
-#     "automatic-speech-recognition",
-#     model=stt_model,
-#     tokenizer=processor.tokenizer,
-#     feature_extractor=processor.feature_extractor,
-#     max_new_tokens=128,
-#     chunk_length_s=30,
-#     batch_size=16,
-#     return_timestamps=True,
-#     device="cuda:1" if torch.cuda.device_count() > 1 else device
-# )
-
-
-# Load TTS  Model
-# from TTS.config import load_config
-# from TTS.api import TTS
-# if not os.path.exists(tts_model_path):
-#     tts_model = TTS(tts_model_id).to(device)
-#     TTS().manager.create_dir_and_download_model(
-#         model_name=tts_model_id,
-#         output_path=tts_model_path,
-#         model_item={
-#             "tos_agreed":
-#               "tos_agreed.txt",
-#             "github_rls_url":
-#               "https://coqui.gateway.scarf.sh/v0.6.1_models/tts_models--en--ljspeech--tacotron2-DDC.zip"
-#         }
-#     )
-# else:
-#     config = load_config(tts_config_path)
-#     tts_model = TTS()
-#     tts_model.load_tts_model_by_path(
-#         model_path=f"{tts_model_id}/model_file.pth",
-#         config_path=tts_config_path,
-#         gpu=True if device != "cpu" else False
-#     )
-
 def file_cleanup(filename):
+    """
+    Removes files from given path
+    """
     os.remove(filename)

@@ -4,10 +4,11 @@ from fastapi import Request
 from fastapi.exceptions import RequestValidationError, HTTPException
 from fastapi.exception_handlers import http_exception_handler as _http_exception_handler
 from fastapi.exception_handlers import (
-request_validation_exception_handler as _request_validation_exception_handler
+    request_validation_exception_handler as _request_validation_exception_handler
 )
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from log_management.logger import logger
+
 
 async def request_validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
     """
@@ -18,7 +19,7 @@ async def request_validation_exception_handler(request: Request, exc: RequestVal
     :return:
     """
     body = await request.body()
-    query_params = request.query_params._dict # pylint: disable=protected-access
+    query_params = request.query_params._dict  # pylint: disable=protected-access
     detail = {"errors": exc.errors(), "body": body.decode(), "query_params": query_params}
     logger.info(detail)
     return await _request_validation_exception_handler(request, exc)

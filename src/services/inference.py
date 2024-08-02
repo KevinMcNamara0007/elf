@@ -1,16 +1,12 @@
 import math
-
-from src.utilities.general import classifications, CONTEXT_WINDOW, INPUT_WINDOW
+from src.utilities.general import classifications, INPUT_WINDOW
 from src.utilities.inference import fetch_llama_cpp_response, classify_prompt
 
 
-async def get_all_models():
-    return [f"{classification['Category']} expert -> {classification['Model'].metadata['general.name']}" for
-            classification
-            in classifications.values()]
-
-
 async def get_expert_response(rules, messages, temperature=.05, top_k=40, top_p=0.95):
+    """
+    Fetches response from llama-server and recalls if generation is truncated. Returns the full response.
+    """
     key = await classify_prompt(messages[-1]["content"])
     print("Classification: {}".format(classifications.get(key)["Category"]))
     rough_token_count = int(math.ceil(len(str(messages)) / 5))
@@ -62,5 +58,8 @@ async def get_expert_response(rules, messages, temperature=.05, top_k=40, top_p=
 
 
 def prompt_classification(prompt):
+    """
+    Classifies a given prompt using the cnn classifier.
+    """
     return classify_prompt(prompt, text=True)
 

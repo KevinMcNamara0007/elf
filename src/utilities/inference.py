@@ -1,11 +1,9 @@
 import json
-import math
-
 import httpx
 import numpy as np
 import requests
 from fastapi import HTTPException
-from src.utilities.general import (classifications, CONTEXT_WINDOW, tokenizer, classifier, LLAMA_CPP_ENDPOINTS,
+from src.utilities.general import (classifications, CONTEXT_WINDOW, tokenizer, classifier,
                                    NUMBER_OF_SERVERS)
 
 
@@ -62,6 +60,9 @@ CURRENT_BALANCER_SELECTION = 0
 
 
 async def fetch_llama_cpp_response(rules, messages, temperature, key, input_tokens=4000, top_k=40, top_p=0.95):
+    """
+    Sends request to llama-server for inference
+    """
     global BALANCER_MAX_OPTION
     global CURRENT_BALANCER_SELECTION
     try:
@@ -98,6 +99,9 @@ async def fetch_llama_cpp_response(rules, messages, temperature, key, input_toke
 
 
 def get_free_url(urls):
+    """
+    Iterates through all available servers until a free server is available. Returns the free url.
+    """
     try:
         free = None
         while not free:
@@ -110,44 +114,3 @@ def get_free_url(urls):
     except Exception as exc:
         print(str(exc))
         raise HTTPException(status_code=500, detail=str(exc))
-
-# async def audio_transcription(audiofile):
-#     try:
-#         with open(audiofile.filename, "wb+") as infile:
-#             infile.write(await audiofile.read())
-#         transcription = stt_pipe(audiofile.filename)["text"].strip()
-#         os.remove(audiofile.filename)
-#         return transcription
-#     except Exception as exc:
-#         raise HTTPException(status_code=500, detail=f"Could not fetch response from transcriber: {exc}")
-
-
-# async def image_processing(prompt, image):
-#     try:
-#         messages = [
-#             {"role": "user", "content": f"<|image_1|>\n{prompt}"}
-#         ]
-#         prompt = vision_processor.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-#         inputs = vision_processor(prompt, [image], return_tensors="pt").to(device)
-#         generation_args = {
-#             "max_new_tokens": 2000,
-#             "temperature": 0.0,
-#             "do_sample": False
-#         }
-#         generate_ids = vision_model.generate(**inputs, eos_token_id=vision_processor.tokenizer.eos_token_id,
-#                                              **generation_args)
-#         generate_ids = generate_ids[:, inputs['input_ids'].shape[1]:]
-#         response = \
-#             vision_processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-#         return response
-#     except Exception as exc:
-#         print(str(exc))
-#         raise HTTPException(status_code=500, detail=f"Error in image vision: {exc}")
-
-# async def create_audio_from_transcription(transcript):
-#     file_name = f"{str(int(time.time()))}.wav"
-#     tts_model.tts_to_file(
-#         text=transcript,
-#         file_path=file_name
-#     )
-#     return file_name
