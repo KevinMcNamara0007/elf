@@ -7,13 +7,11 @@ import shutil
 from dotenv import load_dotenv
 import onnxruntime as ort
 import time
-import socket
 import requests
 import psutil
 
 # Global LLAMA_SERVER_PID variable
 LLAMA_SERVER_PID = None
-
 
 # Import ENV Vars
 load_dotenv(os.getenv("ENV", "config/.env-dev"))
@@ -37,9 +35,9 @@ NUMBER_OF_CORES = multiprocessing.cpu_count()
 WORKERS = f"-j {NUMBER_OF_CORES - 2}" if NUMBER_OF_CORES > 2 else ""
 PLATFORM = platform.system()
 GPU_LAYERS = os.getenv("GPU_LAYERS")
-NUMBER_OF_SERVERS=int(os.getenv("NUMBER_OF_SERVERS"))
-BATCH_SIZE=int(os.getenv("BATCH_SIZE"))
-UBATCH_SIZE=int(os.getenv("UBATCH_SIZE"))
+NUMBER_OF_SERVERS = int(os.getenv("NUMBER_OF_SERVERS"))
+BATCH_SIZE = int(os.getenv("BATCH_SIZE"))
+UBATCH_SIZE = int(os.getenv("UBATCH_SIZE"))
 API_TOKENS = os.getenv("API_TOKENS")
 NO_TOKEN = "No Token was provided."
 API_TOKENS = API_TOKENS.split(",")
@@ -83,7 +81,7 @@ def compile_llama_cpp():
         os.chdir(LLAMA_CPP_HOME)
 
         # Configure CMake
-        gpu_support = "-DGGML_CUDA=ON" if platform.system() != "Darwin" else "" # Adjust as needed based on your setup
+        gpu_support = "-DGGML_CUDA=ON" if platform.system() != "Darwin" else ""  # Adjust as needed based on your setup
         try:
             source_command = subprocess.run(
                 ["cmake", "..", "-B", ".", "-S", LLAMA_SOURCE_FOLDER, gpu_support],
@@ -148,6 +146,7 @@ def start_llama_cpp():
     # Change back to the original working directory
     os.chdir(cwd)
 
+
 def check_server_health(pids_ports):
     """
     Check the health of the llama-servers
@@ -162,15 +161,19 @@ def check_server_health(pids_ports):
                 try:
                     response = requests.get(f"http://{HOST}:{process_port[1]}/health", timeout=3)
                     if response.status_code == 200:
-                        print(f"Connection to llama-server pid#{process_port[0].pid} on port#{process_port[1]} successful.")
+                        print(
+                            f"Connection to llama-server pid#{process_port[0].pid} on port#{process_port[1]} successful.")
                         break
-                except (requests.exceptions.ConnectionError, requests.exceptions.Timeout, requests.exceptions.HTTPError) as e:
-                    print(f"Attempt {attempt + 1}: Connection to llama-server on port http://{HOST}:{process_port[1]}/health failed. Retrying...")
+                except (
+                requests.exceptions.ConnectionError, requests.exceptions.Timeout, requests.exceptions.HTTPError) as e:
+                    print(
+                        f"Attempt {attempt + 1}: Connection to llama-server on port http://{HOST}:{process_port[1]}/health failed. Retrying...")
                     if attempt == max_attempts - 1:
                         print(Exception(
                             f"Could not start llama-server.\n\nERROR:\n\n{process_port[0].communicate()[1].decode('utf-8')}"))
                         exit(1)
                     continue
+
 
 def spin_up_server(number_of_servers):
     """
@@ -185,10 +188,14 @@ def spin_up_server(number_of_servers):
             "--port", str(PORT),
             "--model", GENERAL_MODEL_PATH,
             "--ctx-size", CONTEXT_WINDOW,
-            "--gpu-layers", GPU_LAYERS if number_of_servers == 1 else str(int(GPU_LAYERS)//number_of_servers),  # Number of GPU layers
-            "--threads", str(NUMBER_OF_CORES) if number_of_servers == 1 else str(NUMBER_OF_CORES//number_of_servers),  # Allowable threads for CPU operations
-            "--batch-size", str(BATCH_SIZE) if number_of_servers == 1 else str(BATCH_SIZE//number_of_servers),  # logical maximum batch size (default: 2048)
-            "--ubatch-size", str(UBATCH_SIZE) if number_of_servers == 1 else str(UBATCH_SIZE//number_of_servers),  # physical maximum batch size (default: 512)
+            "--gpu-layers", GPU_LAYERS if number_of_servers == 1 else str(int(GPU_LAYERS) // number_of_servers),
+            # Number of GPU layers
+            "--threads", str(NUMBER_OF_CORES) if number_of_servers == 1 else str(NUMBER_OF_CORES // number_of_servers),
+            # Allowable threads for CPU operations
+            "--batch-size", str(BATCH_SIZE) if number_of_servers == 1 else str(BATCH_SIZE // number_of_servers),
+            # logical maximum batch size (default: 2048)
+            "--ubatch-size", str(UBATCH_SIZE) if number_of_servers == 1 else str(UBATCH_SIZE // number_of_servers),
+            # physical maximum batch size (default: 512)
             "--conversation",
         ]
         processes_ports.append((subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE), PORT))
@@ -204,6 +211,7 @@ def stop_llama_cpp():
         for pid_port in LLAMA_SERVER_PID:
             kill_process_on_port(pid_port[1])
         LLAMA_SERVER_PID = None
+
 
 def kill_process_on_port(port):
     """
@@ -258,6 +266,7 @@ classifications = {
     1: {"Model": GENERAL_MODEL_PATH, "Category": "language", "Link": LLAMA_CPP_ENDPOINTS},
     2: {"Model": GENERAL_MODEL_PATH, "Category": "math", "Link": LLAMA_CPP_ENDPOINTS},
 }
+
 
 def file_cleanup(filename):
     """
