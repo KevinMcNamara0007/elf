@@ -4,14 +4,19 @@ import pickle
 import platform
 import subprocess
 import shutil
+
+from chromadb import Settings
 from dotenv import load_dotenv
 import onnxruntime as ort
 import time
 import requests
 import psutil
+import chromadb
 
 # Global LLAMA_SERVER_PID variable
 LLAMA_SERVER_PID = None
+
+CHROMA_SERVER_PID = None
 
 # Import ENV Vars
 load_dotenv(os.getenv("ENV", "config/.env-dev"))
@@ -43,6 +48,8 @@ NO_TOKEN = "No Token was provided."
 API_TOKENS = API_TOKENS.split(",")
 LLAMA_CPP_ENDPOINTS = []
 LLAMA_CPP_PATH = os.path.join(LLAMA_CPP_HOME, "bin/Release/llama-server")
+CHROMA_FILE_PATH = os.getenv("CHROMA_FILE_PATH")
+CHROMA_PORT = NUMBER_OF_SERVERS + LLAMA_PORT
 
 
 # Function to ensure llama.cpp repository exists
@@ -101,7 +108,7 @@ def compile_llama_cpp():
             print(build_command.stderr.decode())
             LLAMA_CPP_PATH = check_possible_paths()
             if LLAMA_CPP_PATH == "":
-                raise RuntimeException("Could not find llama-server.")
+                raise ConnectionError("Could not find llama-server.")
         except subprocess.CalledProcessError as e:
             print(f"Error during cmake or build process: {e}")
             raise e
@@ -159,13 +166,14 @@ def check_server_health(pids_ports):
             for attempt in range(max_attempts):
                 time.sleep(wait_time)
                 try:
-                    response = requests.get(f"http://{HOST}:{process_port[1]}/health", timeout=3)
+                    response = requests.get(f"http://{HOST}:{process_port[1]}/docs", timeout=3)
                     if response.status_code == 200:
                         print(
                             f"Connection to llama-server pid#{process_port[0].pid} on port#{process_port[1]} successful.")
                         break
                 except (
-                requests.exceptions.ConnectionError, requests.exceptions.Timeout, requests.exceptions.HTTPError) as e:
+                        requests.exceptions.ConnectionError, requests.exceptions.Timeout,
+                        requests.exceptions.HTTPError) as e:
                     print(
                         f"Attempt {attempt + 1}: Connection to llama-server on port http://{HOST}:{process_port[1]}/health failed. Retrying...")
                     if attempt == max_attempts - 1:
@@ -202,15 +210,19 @@ def spin_up_server(number_of_servers):
     return processes_ports
 
 
-def stop_llama_cpp():
+def stop_aux_servers():
     """
     Kills all llama-servers
     """
     global LLAMA_SERVER_PID
+    global CHROMA_SERVER_PID
     if LLAMA_SERVER_PID:
         for pid_port in LLAMA_SERVER_PID:
             kill_process_on_port(pid_port[1])
         LLAMA_SERVER_PID = None
+    if CHROMA_SERVER_PID:
+        kill_process_on_port(CHROMA_PORT)
+        CHROMA_SERVER_PID = None
 
 
 def kill_process_on_port(port):
@@ -240,7 +252,8 @@ def handle_sigterm(signum, frame):
     """
     Listens for SIGTERM and kills llama-servers
     """
-    stop_llama_cpp()
+    kill_process_on_port(CHROMA_PORT)
+    stop_aux_servers()
     exit(0)
 
 
@@ -251,6 +264,58 @@ def replace_port_in_url(url, new_port):
     parts = url.split(":")
     parts[-1] = str(new_port) + "/" + parts[-1].split("/")[-1]  # Replace the second last part (the port)
     return ":".join(parts)
+
+
+def file_cleanup(filename):
+    """
+    Removes files from given path
+    """
+    os.remove(filename)
+
+
+def start_chroma_db(chroma_db_path=CHROMA_FILE_PATH):
+    """
+    Starts the ChromaDB server and verifies its startup.
+    """
+    global CHROMA_SERVER_PID
+    os.makedirs(chroma_db_path, exist_ok=True)
+
+    # Kill any existing process on the ChromaDB port
+    kill_process_on_port(CHROMA_PORT)
+
+    # Command to start ChromaDB server
+    command = [
+        "chroma",
+        "run",
+        "--host", HOST,
+        "--port", str(CHROMA_PORT),
+        "--path", chroma_db_path
+    ]
+
+    try:
+        # Start the ChromaDB server
+        CHROMA_SERVER_PID = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        # Wait and check server health
+        max_attempts = 5
+        wait_time = 2  # seconds
+        for attempt in range(max_attempts):
+            time.sleep(wait_time)
+            try:
+                response = requests.get(f"http://{HOST}:{CHROMA_PORT}/health", timeout=3)
+                if response.status_code == 200:
+                    print(f"ChromaDB server started successfully on port {CHROMA_PORT}.")
+                    return
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout, requests.exceptions.HTTPError):
+                print(f"Attempt {attempt + 1}: Connection to ChromaDB server on port {CHROMA_PORT} failed. Retrying...")
+                if attempt == max_attempts - 1:
+                    error_msg = CHROMA_SERVER_PID.communicate()[1].decode('utf-8')
+                    print(f"Could not start ChromaDB server.\n\nERROR:\n\n{error_msg}")
+                    exit(1)
+
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to start ChromaDB server: {e}")
+        exit(1)
 
 
 # Load the tokenizer
@@ -266,10 +331,3 @@ classifications = {
     1: {"Model": GENERAL_MODEL_PATH, "Category": "language", "Link": LLAMA_CPP_ENDPOINTS},
     2: {"Model": GENERAL_MODEL_PATH, "Category": "math", "Link": LLAMA_CPP_ENDPOINTS},
 }
-
-
-def file_cleanup(filename):
-    """
-    Removes files from given path
-    """
-    os.remove(filename)

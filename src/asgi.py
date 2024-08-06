@@ -1,5 +1,9 @@
-from src.utilities.general import start_llama_cpp, stop_llama_cpp, HOST, UVICORN_PORT, handle_sigterm
+from src.utilities.general import start_llama_cpp, stop_aux_servers, HOST, UVICORN_PORT, handle_sigterm, start_chroma_db
+print("Starting Llama.cpp")
 start_llama_cpp()
+print("Starting ChromaDB")
+start_chroma_db()
+print("Started aux servers...Starting FastAPI")
 from contextlib import asynccontextmanager
 import signal
 import uvicorn
@@ -20,7 +24,7 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
-        stop_llama_cpp()
+        stop_aux_servers()
 
 
 elf = FastAPI(
