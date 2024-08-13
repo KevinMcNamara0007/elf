@@ -1,12 +1,26 @@
 import http
 import time
-from fastapi import Request
 from log_management.logger import logger
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+
+
+class CacheRequestBodyMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        # Cache the body
+        request.state.body = await request.body()
+
+        # Restore the request stream
+        async def receive():
+            return {"type": "http.request", "body": request.state.body, "more_body": False}
+
+        response = await call_next(request)
+        return response
 
 
 async def log_request_middleware(request: Request, call_next):
     """
-    This middleware will log all requests and their processing time
+    This middleware will log all requests and their processing time.
     E.g. log:
     0.0.0.0:123 - GET /ping 200 OK 1.00ms
     :param request:

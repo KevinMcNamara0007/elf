@@ -1,6 +1,6 @@
 import numpy as np
+from chromadb import EmbeddingFunction, Documents, Embeddings
 from fastapi import HTTPException
-
 from src.utilities.general import embedding_tokenizer, embedding_model
 
 
@@ -28,3 +28,8 @@ async def create_embedding(input_text):
     except Exception as e:
         print(f"Error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Could not generate embedding: {str(e)}")
+
+
+class CustomEmbeddingFunction(EmbeddingFunction):
+    async def __call__(self, text):
+        return await create_embedding(text)

@@ -18,7 +18,7 @@ async def request_validation_exception_handler(request: Request, exc: RequestVal
     :param exc:
     :return:
     """
-    body = await request.body()
+    body = request.state.body  # Use cached body instead of reading it again
     query_params = request.query_params._dict  # pylint: disable=protected-access
     detail = {"errors": exc.errors(), "body": body.decode(), "query_params": query_params}
     logger.info(detail)
@@ -39,7 +39,7 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> Union[
 async def unhandled_exception_handler(request: Request, exc: Exception) -> PlainTextResponse:
     """
     This middleware will log all unhandled exceptions.
-    Unhandled Exceptions are all exceptions that are not HTTPExceptions or RequestValidationErrors
+    Unhandled Exceptions are all exceptions that are not HTTPExceptions or RequestValidationErrors.
     :param request:
     :param exc:
     :return:

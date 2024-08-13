@@ -12,11 +12,10 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException
 from starlette.responses import RedirectResponse
-
-from src.controllers import inference, embedding
+from src.controllers import inference, embedding, crud
 from src.utilities.exception_handlers import request_validation_exception_handler, http_exception_handler, \
     unhandled_exception_handler
-from log_management.middleware import log_request_middleware
+from log_management.middleware import log_request_middleware, CacheRequestBodyMiddleware
 
 
 @asynccontextmanager
@@ -41,6 +40,7 @@ elf = FastAPI(
 # Include Routers
 elf.include_router(inference.inference_router)
 elf.include_router(embedding.embedding_router)
+elf.include_router(crud.crud_router)
 
 # CORS Fixes
 elf.add_middleware(
@@ -50,7 +50,7 @@ elf.add_middleware(
     allow_methods=["POST", "GET", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"]
 )
-
+elf.add_middleware(CacheRequestBodyMiddleware)
 elf.middleware("http")(log_request_middleware)
 elf.add_exception_handler(RequestValidationError, request_validation_exception_handler)
 elf.add_exception_handler(HTTPException, http_exception_handler)
