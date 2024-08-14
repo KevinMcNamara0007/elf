@@ -3,12 +3,13 @@ from chromadb.api.types import IncludeEnum
 from chromadb.db.base import NotFoundError
 from chromadb.errors import DuplicateIDError
 from fastapi import HTTPException
-from src.utilities.general import HOST, CHROMA_PORT
+from src.utilities.general import HOST, CHROMA_PORT, SPLIT_SYMBOL
 
 chroma_client = chromadb.HttpClient(
     host=HOST,
     port=CHROMA_PORT
 )
+
 
 def add_record(titles, contents, collection_name, metadata=None):
     try:
@@ -17,9 +18,9 @@ def add_record(titles, contents, collection_name, metadata=None):
             raise HTTPException(status_code=404, detail=f"Collection {collection_name} not found")
 
         collection.add(
-            ids=titles,
+            ids=titles.split(SPLIT_SYMBOL),
             metadatas=metadata,
-            documents=contents,
+            documents=contents.split(SPLIT_SYMBOL),
         )
         return f"{collection_name} record created"
     except ValueError as e:
@@ -38,8 +39,8 @@ def update_record(titles, contents, collection_name):
             raise HTTPException(status_code=404, detail=f"Collection {collection_name} not found")
 
         collection.update(
-            ids=titles,
-            documents=contents
+            ids=titles.split(SPLIT_SYMBOL),
+            documents=contents.split(SPLIT_SYMBOL)
         )
         return f"{collection_name} record updated"
     except NotFoundError as e:
@@ -56,7 +57,7 @@ def delete_record(titles, collection_name):
             raise HTTPException(status_code=404, detail=f"Collection {collection_name} not found")
 
         collection.delete(
-            ids=titles
+            ids=titles.split(SPLIT_SYMBOL),
         )
         return f"{collection_name} record deleted"
     except NotFoundError as e:
@@ -68,20 +69,30 @@ def delete_record(titles, collection_name):
 
 def get_record(titles, collection_name, text_to_find=None, metadata=None, limit=None):
     try:
+        # Fetch the collection
         collection = chroma_client.get_collection(collection_name)
         if not collection:
             raise HTTPException(status_code=404, detail=f"Collection {collection_name} not found")
 
-        return collection.get(
-            ids=titles,
-            where=metadata,
-            limit=limit,
-            include=[IncludeEnum.documents, IncludeEnum.distances],
-            where_document={'$contains': [text_to_find]} if text_to_find else None,
-        )
+        # Prepare the query parameters
+        query_params = {
+            'ids': titles.split(SPLIT_SYMBOL) if titles else None,
+            'where': metadata,
+            'limit': limit,
+            'include': [IncludeEnum.documents]
+        }
+
+        # Optionally add the text search condition
+        if text_to_find:
+            query_params['where_document'] = {'$contains': text_to_find}
+
+        # Perform the query
+        result = collection.get(**query_params)
+        return result
+
     except Exception as e:
         print(f"Get Record Error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error getting record: {titles}")
+        raise HTTPException(status_code=500, detail=f"Error getting record: {str(e)}")
 
 
 def query_record(query_embedding, collection_name, max_results=5):
@@ -91,7 +102,7 @@ def query_record(query_embedding, collection_name, max_results=5):
             raise HTTPException(status_code=404, detail=f"Collection {collection_name} not found")
 
         return collection.query(
-            query_embeddings=[query_embedding],
+            query_texts=[query_embedding],
             n_results=max_results,
         )
     except Exception as e:

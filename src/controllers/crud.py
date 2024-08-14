@@ -1,10 +1,9 @@
-from typing import Union, Optional
+from typing import Union
 from fastapi import APIRouter, Form, Header
-from pydantic import BaseModel, Field
 from src.authentication.authentication import verify_token
 from src.utilities.general import NO_TOKEN
 from src.utilities.crud import add_collection, add_record, update_record, delete_record, \
-    get_available_record_collections, remove_collection
+    get_available_record_collections, remove_collection, get_record
 
 crud_router = APIRouter(
     prefix="/CRUD",
@@ -17,33 +16,49 @@ crud_router = APIRouter(
 )
 
 
-# Model to encapsulate the data being passed
-class RecordData(BaseModel):
-    titles: list[str] = Field(description="Titles of record")
-    contents: list[str] = Field(description="Contents of record")
-    collection_name: str = Field(description="Name of collection")
-    metadata: Optional[dict] = Field(default=None)
+@crud_router.post("/get_record")
+async def fetch_record(
+        token: Union[str, None] = Header(NO_TOKEN, convert_underscores=False),
+        titles: str = Form(default=None, description="List of titles to fetch."),
+        collection_name: str = Form(description="Name of the collection to fetch."),
+        text_to_find: str = Form(default=None, description="Text to find to find."),
+        metadata: str = Form(default=None, description="Metadata to find."),
+        limit: int = Form(default=None, description="Number of records to fetch."),
+):
+    assert verify_token(token)
+    return get_record(
+        titles=titles,
+        collection_name=collection_name,
+        text_to_find=text_to_find,
+        metadata=metadata,
+        limit=limit,
+    )
 
 
 @crud_router.post("/add_record")
 async def generate_record(
         token: Union[str, None] = Header(default=NO_TOKEN, convert_underscores=False),
-        data: RecordData = Form(...)
+        titles: str = Form(description="List of titles to add."),
+        contents: str = Form(description="List of contents to add."),
+        metadata: str = Form(default=None, description="Dictionary of metadata to add."),
+        collection_name: str = Form(description="Name of the collection to add the record to."),
 ):
     assert verify_token(token)
     return add_record(
-        titles=data.titles, contents=data.contents, collection_name=data.collection_name, metadata=data.metadata
+        titles=titles, contents=contents, collection_name=collection_name, metadata=metadata
     )
 
 
 @crud_router.post("/update_record")
 async def modify_record(
         token: Union[str, None] = Header(default=NO_TOKEN, convert_underscores=False),
-        data: RecordData = Form(...)
+        titles: str = Form(description="List of titles to add."),
+        contents: str = Form(description="List of contents to add."),
+        collection_name: str = Form(description="Name of the collection to add the record to."),
 ):
     assert verify_token(token)
     return update_record(
-        titles=data.titles, contents=data.contents, collection_name=data.collection_name
+        titles=titles, contents=contents, collection_name=collection_name
     )
 
 

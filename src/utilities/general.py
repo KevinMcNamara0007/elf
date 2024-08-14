@@ -9,7 +9,6 @@ import onnxruntime as ort
 import time
 import requests
 import psutil
-from transformers import BertTokenizer
 
 # Global LLAMA_SERVER_PID variable
 LLAMA_SERVER_PID = None
@@ -18,6 +17,7 @@ CHROMA_SERVER_PID = None
 
 # Import ENV Vars
 load_dotenv(os.getenv("ENV", "config/.env-dev"))
+SPLIT_SYMBOL = os.getenv("SPLIT_SYMBOL")
 general_model_path = os.getenv("general")
 programming_model_path = os.getenv("programming")
 classifier_tokenizer = os.getenv("classifier_tokenizer")
@@ -48,11 +48,6 @@ LLAMA_CPP_ENDPOINTS = []
 LLAMA_CPP_PATH = os.path.join(LLAMA_CPP_HOME, "bin/Release/llama-server")
 CHROMA_FILE_PATH = os.getenv("CHROMA_FILE_PATH")
 CHROMA_PORT = NUMBER_OF_SERVERS + LLAMA_PORT
-ONNX_Embedding_MODEL_PATH = os.getenv("ONNX_Embedding_MODEL_PATH")
-ONNX_Embedding_TOKENIZER_PATH = os.getenv("ONNX_Embedding_TOKENIZER_PATH")
-
-embedding_tokenizer = BertTokenizer.from_pretrained(ONNX_Embedding_TOKENIZER_PATH)
-embedding_model = ort.InferenceSession(ONNX_Embedding_MODEL_PATH)
 
 
 # Function to ensure llama.cpp repository exists

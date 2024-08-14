@@ -3,6 +3,7 @@ from typing import Union
 from fastapi import APIRouter, status, Form, HTTPException, Header
 from src.authentication.authentication import verify_token
 from src.services.inference import get_expert_response, prompt_classification
+from src.utilities.crud import query_record
 from src.utilities.general import NO_TOKEN
 
 inference_router = APIRouter(
@@ -37,7 +38,8 @@ async def ask_an_expert(
                 raise HTTPException(status_code=400, detail="Messages must be a list of dictionaries.")
             for message in history:
                 if not isinstance(message, dict) or 'role' not in message or 'content' not in message:
-                    raise HTTPException(status_code=400, detail="Each message must be a dictionary with 'role' and 'content' keys.")
+                    raise HTTPException(status_code=400,
+                                        detail="Each message must be a dictionary with 'role' and 'content' keys.")
         except json.JSONDecodeError as exc:
             raise HTTPException(status_code=400, detail=f"Invalid JSON format for messages. {exc}")
 
@@ -62,3 +64,14 @@ async def determine_expert(
 ):
     assert verify_token(token)
     return await prompt_classification(prompt)
+
+
+@inference_router.post("/semantic_search", status_code=status.HTTP_200_OK, description="Semantic search.")
+async def semantic_search(
+        token: Union[str, None] = Header(default=NO_TOKEN, convert_underscores=False),
+        query: str = Form(description="What you're looking for."),
+        collection_name: str = Form(description="Collection name"),
+        max_results: int = Form(default=5, description="Maximum number of results to return"),
+):
+    assert verify_token(token)
+    return query_record(query, collection_name, max_results)
