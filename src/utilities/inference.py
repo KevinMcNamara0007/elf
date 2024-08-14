@@ -58,6 +58,9 @@ async def classify_prompt(prompt, max_len=100, text=False):
 BALANCER_MAX_OPTION = NUMBER_OF_SERVERS
 CURRENT_BALANCER_SELECTION = 0
 
+def convert_to_llama(messages):
+    "<|start_header_id|>system<|end_header_id|>\n\nYou are a helpful assistant<|eot_id|><|start_header_id|>user<|end_header_id|>\n\nHello<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\nHi there<|eot_id|><|start_header_id|>user<|end_header_id|>\n\nWho are you<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\nI am an assistant<|eot_id|><|start_header_id|>user<|end_header_id|>\n\nAnother question<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
+
 
 async def fetch_llama_cpp_response(rules, messages, temperature, key, input_tokens=4000, top_k=40, top_p=0.95):
     """

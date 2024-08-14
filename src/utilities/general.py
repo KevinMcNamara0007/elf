@@ -48,7 +48,10 @@ LLAMA_CPP_ENDPOINTS = []
 LLAMA_CPP_PATH = os.path.join(LLAMA_CPP_HOME, "bin/Release/llama-server")
 CHROMA_FILE_PATH = os.getenv("CHROMA_FILE_PATH")
 CHROMA_PORT = NUMBER_OF_SERVERS + LLAMA_PORT
+CHATML_TEMPLATE = os.getenv("CHATML_TEMPLATE")
+LLAMA3_TEMPLATE = os.getenv("LLAMA3_TEMPLATE")
 
+CHAT_TEMPLATE = LLAMA3_TEMPLATE if "LLAMA" in general_model_path.upper() else CHATML_TEMPLATE
 
 # Function to ensure llama.cpp repository exists
 def ensure_llama_cpp_repository():
@@ -202,6 +205,7 @@ def spin_up_server(number_of_servers):
             # logical maximum batch size (default: 2048)
             "--ubatch-size", str(UBATCH_SIZE) if number_of_servers == 1 else str(UBATCH_SIZE // number_of_servers),
             # physical maximum batch size (default: 512)
+            "--chat-template", CHAT_TEMPLATE,
             "--conversation",
         ]
         processes_ports.append((subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE), PORT))
