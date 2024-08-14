@@ -7,7 +7,7 @@ async def get_expert_response(rules, messages, temperature=.05, top_k=40, top_p=
     """
     Fetches response from llama-server and recalls if generation is truncated. Returns the full response.
     """
-    key = await classify_prompt(messages[-1]["content"])
+    key = await classify_prompt(messages[-1].content)
     print("Classification: {}".format(classifications.get(key)["Category"]))
     rough_token_count = int(math.ceil(len(str(messages)) / 5))
     # Fetch response

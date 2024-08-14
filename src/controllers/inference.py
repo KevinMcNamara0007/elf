@@ -1,7 +1,7 @@
-import json
-from typing import Union
-from fastapi import APIRouter, status, Form, HTTPException, Header
+from fastapi import APIRouter, HTTPException, Header, Body
+from starlette import status
 from src.authentication.authentication import verify_token
+from src.modeling.request_models import AskExpertRequest, ClassifyRequest, SemanticSearchRequest, Message
 from src.services.inference import get_expert_response, prompt_classification
 from src.utilities.crud import query_record
 from src.utilities.general import NO_TOKEN
@@ -19,59 +19,42 @@ inference_router = APIRouter(
 
 @inference_router.post("/ask_an_expert", status_code=status.HTTP_200_OK, description="Ask any question.")
 async def ask_an_expert(
-        token: Union[str, None] = Header(default=NO_TOKEN, convert_underscores=False),
-        messages: str = Form(default=None, description="Chat style prompting"),
-        prompt: str = Form(default=None, description="The prompt you want answered."),
-        temperature: float = Form(default=0.05, description="Temperature of the model."),
-        rules: str = Form(default="You are a friendly virtual assistant.",
-                          description="Rules of the model."),
-        top_k: int = Form(default=40),
-        top_p: float = Form(default=0.95)
+        token: str = Header(default=NO_TOKEN, convert_underscores=False),
+        request: AskExpertRequest = Body(...)
 ):
     assert verify_token(token)
-    history = []
-    # Validate and parse the messages
-    if messages:
-        try:
-            history.extend(json.loads(messages))
-            if not isinstance(history, list):
-                raise HTTPException(status_code=400, detail="Messages must be a list of dictionaries.")
-            for message in history:
-                if not isinstance(message, dict) or 'role' not in message or 'content' not in message:
-                    raise HTTPException(status_code=400,
-                                        detail="Each message must be a dictionary with 'role' and 'content' keys.")
-        except json.JSONDecodeError as exc:
-            raise HTTPException(status_code=400, detail=f"Invalid JSON format for messages. {exc}")
+    history = request.messages or []
 
-    if prompt:
-        history.append({"role": "User", "content": prompt})
-    if not messages and not prompt:
+    if request.prompt:
+        message = Message()
+        message.role = "user"
+        message.content = request.prompt
+        history.append(message)
+    if not history:
         raise HTTPException(status_code=400, detail="Provide Messages, Prompt or both.")
 
     return await get_expert_response(
-        rules=rules,
+        rules=request.rules,
         messages=history,
-        temperature=temperature,
-        top_k=top_k,
-        top_p=top_p,
+        temperature=request.temperature,
+        top_k=request.top_k,
+        top_p=request.top_p,
     )
 
 
 @inference_router.post("/classify", status_code=status.HTTP_200_OK, description="Classify your prompt.")
 async def determine_expert(
-        token: Union[str, None] = Header(default=NO_TOKEN, convert_underscores=False),
-        prompt: str = Form()
+        token: str = Header(default=NO_TOKEN, convert_underscores=False),
+        request: ClassifyRequest = Body(...)
 ):
     assert verify_token(token)
-    return await prompt_classification(prompt)
+    return await prompt_classification(request.prompt)
 
 
 @inference_router.post("/semantic_search", status_code=status.HTTP_200_OK, description="Semantic search.")
 async def semantic_search(
-        token: Union[str, None] = Header(default=NO_TOKEN, convert_underscores=False),
-        query: str = Form(description="What you're looking for."),
-        collection_name: str = Form(description="Collection name"),
-        max_results: int = Form(default=5, description="Maximum number of results to return"),
+        token: str = Header(default=NO_TOKEN, convert_underscores=False),
+        request: SemanticSearchRequest = Body(...)
 ):
     assert verify_token(token)
-    return query_record(query, collection_name, max_results)
+    return query_record(request.query, request.collection_name, request.max_results)
