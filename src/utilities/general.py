@@ -28,7 +28,7 @@ CONTEXT_WINDOW = os.getenv("CONTEXT_WINDOW")
 INPUT_WINDOW = int(os.getenv("INPUT_WINDOW"))
 HOST = os.getenv("HOST")
 UVICORN_PORT = os.getenv("UVICORN_PORT")
-LLAMA_CPP_HOME = os.getenv("LLAMA_CPP_HOME")
+LLAMA_CPP_HOME = os.getenv("LLAMA_CPP_HOME", "/opt/cx_intelligence/aiaas/compiled_llama_cpp")
 LLAMA_SOURCE_FOLDER = os.path.join(os.getcwd(), os.getenv("LLAMA_SOURCE_FOLDER"))
 LLAMA_PORT = int(UVICORN_PORT) + 1
 LLAMA_CPP_ENDPOINT = f"http://{HOST}:{LLAMA_PORT}/completion"
@@ -90,7 +90,7 @@ def compile_llama_cpp():
         os.chdir(LLAMA_CPP_HOME)
 
         # Configure CMake
-        gpu_support = "-DGGML_CUDA=ON" if platform.system() != "Darwin" else ""  # Adjust as needed based on your setup
+        gpu_support = "-DGGML_CUDA=ON" if platform.system() != "Darwin" else "-DLLAMA_METAL=ON"  # Adjust as needed based on your setup
         try:
             source_command = subprocess.run(
                 ["cmake", "..", "-B", ".", "-S", LLAMA_SOURCE_FOLDER, gpu_support],

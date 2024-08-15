@@ -79,6 +79,7 @@ async def fetch_llama_cpp_response(rules, messages, temperature, key, input_toke
                 "<|im_end|>",
                 "</s>",
                 "<end_of_turn>",
+                "<|eot_id|>",
                 '[{\"role\":'
             ]
         }
