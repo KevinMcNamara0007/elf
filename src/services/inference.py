@@ -21,7 +21,7 @@ async def get_expert_response(rules, messages, temperature=.05, top_k=40, top_p=
     finish_reason = cont_response['truncated']
     # If the finish_reason was due to length, maintain a loop to generate the rest of the answer.
     upper_bound_token_limit = INPUT_WINDOW
-    continuation_rules = f"Please continue the response. ORIGINAL PROMPT: {messages[-1]['content']}"
+    continuation_rules = f"Please continue the response. ORIGINAL PROMPT: {messages[-1].content}"
     while finish_reason and upper_bound_token_limit > 0:
         continuation_prompt = [
             {'role': 'assistant', 'content': final_response}
