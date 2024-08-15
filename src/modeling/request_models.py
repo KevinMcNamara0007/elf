@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Any
 from pydantic import BaseModel
 
 
@@ -33,8 +33,8 @@ class AddCollectionRequest(BaseModel):
 
 
 class Message(BaseModel):
-    role: str
-    content: str
+    role: Optional[str] = None
+    content: Optional[str] = None
 
 
 class AskExpertRequest(BaseModel):
