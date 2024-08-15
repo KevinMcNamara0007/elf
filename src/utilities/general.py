@@ -46,12 +46,13 @@ NO_TOKEN = "No Token was provided."
 API_TOKENS = API_TOKENS.split(",")
 LLAMA_CPP_ENDPOINTS = []
 LLAMA_CPP_PATH = os.path.join(LLAMA_CPP_HOME, "bin/Release/llama-server")
-CHROMA_FILE_PATH = os.getenv("CHROMA_FILE_PATH")
+CHROMA_DATA_PATH = os.getenv("CHROMA_DATA_PATH")
 CHROMA_PORT = NUMBER_OF_SERVERS + LLAMA_PORT
 CHATML_TEMPLATE = os.getenv("CHATML_TEMPLATE")
 LLAMA3_TEMPLATE = os.getenv("LLAMA3_TEMPLATE")
 
 CHAT_TEMPLATE = LLAMA3_TEMPLATE if "LLAMA" in general_model_path.upper() else CHATML_TEMPLATE
+
 
 # Function to ensure llama.cpp repository exists
 def ensure_llama_cpp_repository():
@@ -275,13 +276,14 @@ def file_cleanup(filename):
     os.remove(filename)
 
 
-def start_chroma_db(chroma_db_path=CHROMA_FILE_PATH):
+def start_chroma_db(chroma_db_path=CHROMA_DATA_PATH):
     """
     Starts the ChromaDB server and verifies its startup.
     """
     global CHROMA_SERVER_PID
+    cwd = os.getcwd()
     os.makedirs(chroma_db_path, exist_ok=True)
-
+    os.chdir(chroma_db_path)
     # Kill any existing process on the ChromaDB port
     kill_process_on_port(CHROMA_PORT)
 
@@ -291,9 +293,7 @@ def start_chroma_db(chroma_db_path=CHROMA_FILE_PATH):
         "run",
         "--host", HOST,
         "--port", str(CHROMA_PORT),
-        "--path", chroma_db_path
     ]
-
     try:
         # Start the ChromaDB server
         CHROMA_SERVER_PID = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -318,6 +318,7 @@ def start_chroma_db(chroma_db_path=CHROMA_FILE_PATH):
     except subprocess.CalledProcessError as e:
         print(f"Failed to start ChromaDB server: {e}")
         exit(1)
+    os.chdir(cwd)
 
 
 # Load the tokenizer
