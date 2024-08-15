@@ -90,7 +90,7 @@ def compile_llama_cpp():
         os.chdir(LLAMA_CPP_HOME)
 
         # Configure CMake
-        gpu_support = "-DGGML_CUDA=ON" if platform.system() != "Darwin" else "-DLLAMA_METAL=ON"  # Adjust as needed based on your setup
+        gpu_support = "-DGGML_CUDA=ON" if platform.system() != "Darwin" else "-DGGML_METAL=ON"  # Adjust as needed based on your setup
         try:
             source_command = subprocess.run(
                 ["cmake", "..", "-B", ".", "-S", LLAMA_SOURCE_FOLDER, gpu_support],
