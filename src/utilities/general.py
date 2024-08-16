@@ -206,7 +206,7 @@ def spin_up_server(number_of_servers):
             # logical maximum batch size (default: 2048)
             "--ubatch-size", str(UBATCH_SIZE) if number_of_servers == 1 else str(UBATCH_SIZE // number_of_servers),
             # physical maximum batch size (default: 512)
-            "--chat-template", CHAT_TEMPLATE,
+            # "--chat-template", CHAT_TEMPLATE,
             "--conversation",
         ]
         processes_ports.append((subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE), PORT))
@@ -319,6 +319,9 @@ def start_chroma_db(chroma_db_path=CHROMA_DATA_PATH):
         print(f"Failed to start ChromaDB server: {e}")
         exit(1)
     os.chdir(cwd)
+
+
+
 
 
 # Load the tokenizer

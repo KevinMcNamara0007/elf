@@ -43,7 +43,7 @@ class AskExpertRequest(BaseModel):
     temperature: float = 0.05
     rules: str = "You are a virtual assistant."
     top_k: int = 40
-    top_p: float = 0.95
+    top_p: float = .95
 
 
 class ClassifyRequest(BaseModel):

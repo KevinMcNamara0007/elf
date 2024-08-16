@@ -1,60 +1,57 @@
 import math
 from src.utilities.general import classifications, INPUT_WINDOW
-from src.utilities.inference import fetch_llama_cpp_response, classify_prompt
+from src.utilities.inference import fetch_llama_cpp_response, classify_prompt, fetch_llama_cpp_response_stream
 
 
-async def get_expert_response(rules, messages, temperature=.05, top_k=40, top_p=0.95):
+async def get_expert_response(rules, messages, temperature=0.05, top_k=40, top_p=.95):
     """
     Fetches response from llama-server and recalls if generation is truncated. Returns the full response.
     """
     key = await classify_prompt(messages[-1].content)
     print("Classification: {}".format(classifications.get(key)["Category"]))
-    rough_token_count = int(math.ceil(len(str(messages)) / 5))
-    # Fetch response
-    cont_response = await fetch_llama_cpp_response(rules, messages, temperature, key, rough_token_count, top_k, top_p)
-    # Extract model response
-    final_response = cont_response['content']
-    # Extract other useful data from original response
-    p_tokens = cont_response['tokens_evaluated']
-    c_tokens = cont_response['tokens_predicted']
-    # Extract finish reason from response
-    finish_reason = cont_response['truncated']
-    # If the finish_reason was due to length, maintain a loop to generate the rest of the answer.
-    upper_bound_token_limit = INPUT_WINDOW
-    continuation_rules = f"Please continue the response. ORIGINAL PROMPT: {messages[-1].content}"
-    while finish_reason and upper_bound_token_limit > 0:
-        continuation_prompt = [
-            {'role': 'assistant', 'content': final_response}
-        ]
-        cont_response = await fetch_llama_cpp_response(
-            rules=continuation_rules,
-            messages=continuation_prompt,
-            temperature=temperature,
-            key=key,
-            input_tokens=c_tokens,
-            top_p=top_p,
-            top_k=top_k,
-        )
-        finish_reason = cont_response['truncated']
-        final_response += " " + cont_response['content']
-
-        p_tokens += cont_response['tokens_evaluated']
-        c_tokens += cont_response['tokens_predicted']
-        upper_bound_token_limit = INPUT_WINDOW - c_tokens
+    response = await fetch_llama_cpp_response(
+        rules=rules,
+        messages=messages,
+        temperature=temperature,
+        key=key,
+        top_p=top_p,
+        top_k=top_k,
+    )
+    prompt_tokens = int(response['tokens_evaluated'])
+    completion_tokens = int(response['tokens_predicted'])
     return {
         'usage': {
-            'total_tokens': p_tokens + c_tokens,
-            'prompt_tokens': p_tokens,
-            'completion_tokens': c_tokens,
+            'total_tokens': prompt_tokens + completion_tokens,
+            'prompt_tokens': prompt_tokens,
+            'completion_tokens': completion_tokens,
         },
         'choices': [{
             'message': {
-                'content': final_response
+                'content': response['content']
             },
-            'finish_reason': 'stop'
+            'finish_reason': 'length' if response['stopped_limit'] else 'stop',
         }],
-        'timings': cont_response['timings']
+        'timings': response['timings']
     }
+
+
+async def get_expert_response_stream(rules, messages, temperature=0.05, top_k=40, top_p=0.95):
+    """
+    Fetches response from llama-server and streams the result. Yields each chunk as it's received.
+    """
+    key = await classify_prompt(messages[-1].content)
+    print(f"Classification: {classifications.get(key)['Category']}")
+
+    # Call the async generator function and stream its output
+    async for chunk in fetch_llama_cpp_response_stream(
+            rules=rules,
+            messages=messages,
+            temperature=temperature,
+            key=key,
+            top_p=top_p,
+            top_k=top_k,
+    ):
+        yield chunk  # Yield each chunk as it is received
 
 
 def prompt_classification(prompt):
@@ -62,4 +59,3 @@ def prompt_classification(prompt):
     Classifies a given prompt using the cnn classifier.
     """
     return classify_prompt(prompt, text=True)
-

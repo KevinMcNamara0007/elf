@@ -4,7 +4,7 @@ import numpy as np
 import requests
 from fastapi import HTTPException
 from src.utilities.general import (classifications, CONTEXT_WINDOW, tokenizer, classifier,
-                                   NUMBER_OF_SERVERS)
+                                   NUMBER_OF_SERVERS, CHAT_TEMPLATE, LLAMA3_TEMPLATE, CHATML_TEMPLATE)
 
 
 def load_model(key):
@@ -57,31 +57,62 @@ async def classify_prompt(prompt, max_len=100, text=False):
 
 BALANCER_MAX_OPTION = NUMBER_OF_SERVERS
 CURRENT_BALANCER_SELECTION = 0
+STOP_SYMBOLS = []
 
 
-async def fetch_llama_cpp_response(rules, messages, temperature, key, input_tokens=4000, top_k=40, top_p=0.95):
+def llama3_template(messages):
+    transcript = ""
+    for message in messages:
+        transcript += f"{'Llama' if 'user' not in message.role.lower() else 'User'}: {message.content}\n\n"
+    return transcript
+
+
+def chatml_template(messages):
+    transcript = ""
+    for message in messages:
+        transcript += f"<|im_start|>{'assistant' if 'user' not in message.role.lower() else 'user'}\n {message.content}<|im_end|>\n"
+    return transcript
+
+
+def convert_to_chat_template(rules, messages, template=CHATML_TEMPLATE):
+    global STOP_SYMBOLS
+    if template == CHATML_TEMPLATE:
+        STOP_SYMBOLS = ["</s>",
+                        "<|end|>",
+                        "<|eot_id|>",
+                        "<|end_of_text|>",
+                        "<|im_end|>",
+                        "<|EOT|>",
+                        "<|END_OF_TURN_TOKEN|>",
+                        "<|end_of_turn|>",
+                        "<|endoftext|>",
+                        "assistant",
+                        "user"
+                        ]
+        return f"<|im_start|>system\n{rules}<|im_end|>\n{chatml_template(messages)}\nassistant"
+    else:
+        STOP_SYMBOLS = ["</s>", "Llama:", "User:"]
+        return rules + llama3_template(messages) + "Llama:"
+
+
+async def fetch_llama_cpp_response(rules, messages, temperature, key, top_k=40, top_p=.95):
     """
     Sends request to llama-server for inference
     """
     global BALANCER_MAX_OPTION
     global CURRENT_BALANCER_SELECTION
     try:
-        serialized_messages = [message.dict() for message in messages]
         expert_urls = load_model(key)
         payload = {
-            "prompt": json.dumps(serialized_messages),
+            "prompt": convert_to_chat_template(rules, messages, template=CHATML_TEMPLATE),
+            "stream": False,
+            "n_predict": -1,
             "temperature": temperature,
-            "n_predict": int(CONTEXT_WINDOW) - input_tokens,
-            "system_prompt": rules,
+            "stop": STOP_SYMBOLS,
             "top_k": top_k,
             "top_p": top_p,
-            "stop": [
-                "<|im_end|>",
-                "</s>",
-                "<end_of_turn>",
-                "<|eot_id|>",
-                '[{\"role\":'
-            ]
+            "cache_prompt": True
+
         }
 
         expert_url = f"{expert_urls[CURRENT_BALANCER_SELECTION]}/completion"
@@ -90,11 +121,44 @@ async def fetch_llama_cpp_response(rules, messages, temperature, key, input_toke
             expert_response = await client.post(expert_url, json=payload)
             expert_response.raise_for_status()
             response_data = expert_response.json()
-
-        response_data['content'] = (
-            response_data['content'].replace(' assistant', '').replace('assistant', '').replace('<|im_start|>', '').replace('<|im_end|>', '')
-        )
         return response_data
+    except httpx.RequestError as e:
+        print("Network Error:", str(e))
+        raise HTTPException(status_code=500, detail=f"Network error while fetching response from llama.cpp: {e}")
+    except Exception as exc:
+        print("Response Error:", str(exc))
+        raise HTTPException(status_code=500, detail=f"Could not fetch response from llama.cpp: {exc.args}")
+
+
+async def fetch_llama_cpp_response_stream(rules, messages, temperature, key, top_k=40, top_p=0.95):
+    """
+    Sends request to llama-server for inference and streams the response back.
+    """
+    global BALANCER_MAX_OPTION
+    global CURRENT_BALANCER_SELECTION
+    try:
+        prompt = convert_to_chat_template(rules, messages, template=CHATML_TEMPLATE)
+        expert_urls = load_model(key)
+        payload = {
+            "prompt": prompt,
+            "stream": True,  # Enable streaming in the request
+            "n_predict": -1,
+            "temperature": temperature,
+            "stop": STOP_SYMBOLS,
+            "top_k": top_k,
+            "top_p": top_p,
+            "cache_prompt": True
+        }
+
+        expert_url = f"{expert_urls[CURRENT_BALANCER_SELECTION]}/completion"
+        CURRENT_BALANCER_SELECTION = (CURRENT_BALANCER_SELECTION + 1) % BALANCER_MAX_OPTION
+        async with httpx.AsyncClient(timeout=300) as client:
+            async with client.stream("POST", expert_url, json=payload) as response:
+                async for chunk in response.aiter_text():
+                    yield chunk  # Yield each chunk as it is received
+    except httpx.RequestError as e:
+        print("Network Error:", str(e))
+        raise HTTPException(status_code=500, detail=f"Network error while fetching response from llama.cpp: {e}")
     except Exception as exc:
         print("Response Error:", str(exc))
         raise HTTPException(status_code=500, detail=f"Could not fetch response from llama.cpp: {exc.args}")
