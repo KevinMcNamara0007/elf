@@ -13,8 +13,8 @@ class GetRecordRequest(BaseModel):
 class AddRecordRequest(BaseModel):
     titles: str
     contents: str
-    metadata: Optional[str] = None
     collection_name: str
+    metadata: Optional[str] = None
 
 
 class UpdateRecordRequest(BaseModel):
@@ -38,12 +38,12 @@ class Message(BaseModel):
 
 
 class AskExpertRequest(BaseModel):
-    messages: Optional[List[Message]] = None
-    prompt: Optional[str] = None
     temperature: float = 0.05
     rules: str = "You are a virtual assistant."
     top_k: int = 40
     top_p: float = .95
+    messages: Optional[List[Message]] = None
+    prompt: Optional[str] = None
 
 
 class ClassifyRequest(BaseModel):

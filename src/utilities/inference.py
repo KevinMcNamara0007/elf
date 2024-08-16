@@ -111,8 +111,6 @@ async def fetch_llama_cpp_response(rules, messages, temperature, key, top_k=40, 
             "stop": STOP_SYMBOLS,
             "top_k": top_k,
             "top_p": top_p,
-            "cache_prompt": True
-
         }
 
         expert_url = f"{expert_urls[CURRENT_BALANCER_SELECTION]}/completion"
@@ -147,7 +145,6 @@ async def fetch_llama_cpp_response_stream(rules, messages, temperature, key, top
             "stop": STOP_SYMBOLS,
             "top_k": top_k,
             "top_p": top_p,
-            "cache_prompt": True
         }
 
         expert_url = f"{expert_urls[CURRENT_BALANCER_SELECTION]}/completion"
