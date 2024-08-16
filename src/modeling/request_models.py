@@ -1,12 +1,12 @@
-from typing import List, Optional, Any
+from typing import List, Optional
 from pydantic import BaseModel
 
 
 class GetRecordRequest(BaseModel):
-    titles: str
     collection_name: str
+    titles: Optional[str] = None
     text_to_find: Optional[str] = None
-    metadata: Optional[str] = None
+    metadata: Optional[list] = None
     limit: Optional[int] = None
 
 
@@ -14,7 +14,7 @@ class AddRecordRequest(BaseModel):
     titles: str
     contents: str
     collection_name: str
-    metadata: Optional[str] = None
+    metadata: Optional[list] = None
 
 
 class UpdateRecordRequest(BaseModel):
@@ -24,7 +24,7 @@ class UpdateRecordRequest(BaseModel):
 
 
 class DeleteRecordRequest(BaseModel):
-    titles: List[str]
+    titles: str
     collection_name: str
 
 
