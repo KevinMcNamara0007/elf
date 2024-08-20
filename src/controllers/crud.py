@@ -25,63 +25,95 @@ async def fetch_record(
         token: str = Header(default=NO_TOKEN, convert_underscores=False),
         request: GetRecordRequest = Body(...)
 ):
+    """
+    Returns record(s) based on title, text contained in the document.
+    In progress feature: -> will return all records from a collection, offset is required.
+    :param token:
+    :param request:
+    :return:
+    """
     if not verify_token(token):
         raise HTTPException(status_code=403, detail="Invalid token")
     return get_record(
-        titles=request.titles,
-        collection_name=request.collection_name,
-        text_to_find=request.text_to_find,
-        metadata=request.metadata,
-        limit=request.limit,
+        titles=request.titles,  # required separated by :::
+        collection_name=request.collection_name,  # required
+        text_to_find=request.text_to_find,  # optional text to look for in documents
+        metadata=request.metadata,  # optional not yet implemented
+        limit=request.limit,  # optional number of records to return
     )
 
 
 @crud_router.post("/add_record")
 async def generate_record(
-    token: str = Header(default=NO_TOKEN, convert_underscores=False),
-    request: AddRecordRequest = Body(...)
+        token: str = Header(default=NO_TOKEN, convert_underscores=False),
+        request: AddRecordRequest = Body(...)
 ):
+    """
+    Adds new record(s) based on title, text contained in the document.
+    In progress feature: -> metadata can be added to categorize documents further
+    :param token:
+    :param request:
+    :return:
+    """
     if not verify_token(token):
         raise HTTPException(status_code=403, detail="Invalid token")
     return add_record(
-        titles=request.titles,
-        contents=request.contents,
-        collection_name=request.collection_name,
-        metadata=request.metadata,
+        titles=request.titles,  # required seperated by :::
+        contents=request.contents,  # required seperated by :::
+        collection_name=request.collection_name,  # required singular name
+        metadata=request.metadata,  # optional not yet implemented
     )
 
 
 @crud_router.post("/update_record")
 async def modify_record(
-    token: str = Header(default=NO_TOKEN, convert_underscores=False),
-    request: UpdateRecordRequest = Body(...)
+        token: str = Header(default=NO_TOKEN, convert_underscores=False),
+        request: UpdateRecordRequest = Body(...)
 ):
+    """
+    Updates record(s) based on title, text contained in the document.
+    In progress feature: -> update the metadata of a record
+    :param token:
+    :param request:
+    :return:
+    """
     if not verify_token(token):
         raise HTTPException(status_code=403, detail="Invalid token")
     return update_record(
-        titles=request.titles,
-        contents=request.contents,
-        collection_name=request.collection_name,
+        titles=request.titles,  # required seperated by :::
+        contents=request.contents,  # required seperated by :::
+        collection_name=request.collection_name,  # required singular name
     )
 
 
 @crud_router.post("/delete_record")
 async def remove_record(
-    token: str = Header(default=NO_TOKEN, convert_underscores=False),
-    request: DeleteRecordRequest = Body(...)
+        token: str = Header(default=NO_TOKEN, convert_underscores=False),
+        request: DeleteRecordRequest = Body(...)
 ):
+    """
+    Removes record(s) based on title, text contained in the document.
+    :param token:
+    :param request:
+    :return:
+    """
     if not verify_token(token):
         raise HTTPException(status_code=403, detail="Invalid token")
     return delete_record(
-        titles=request.titles,
-        collection_name=request.collection_name,
+        titles=request.titles,  # required seperated by :::
+        collection_name=request.collection_name,  # required singular name
     )
 
 
 @crud_router.post("/get_collections")
 async def get_collections(
-    token: str = Header(default=NO_TOKEN, convert_underscores=False)
+        token: str = Header(default=NO_TOKEN, convert_underscores=False)
 ):
+    """
+    Returns all available collections.
+    :param token:
+    :return:
+    """
     if not verify_token(token):
         raise HTTPException(status_code=403, detail="Invalid token")
     return get_available_record_collections()
@@ -89,19 +121,36 @@ async def get_collections(
 
 @crud_router.post("/add_collection")
 async def generate_collection(
-    token: str = Header(default=NO_TOKEN, convert_underscores=False),
-    request: AddCollectionRequest = Body(...)
+        token: str = Header(default=NO_TOKEN, convert_underscores=False),
+        request: AddCollectionRequest = Body(...)
 ):
+    """
+    Adds new collection
+    In progress feature: -> metadata can be added to a collection
+    :param token:
+    :param request:
+    :return:
+    """
     if not verify_token(token):
         raise HTTPException(status_code=403, detail="Invalid token")
-    return add_collection(request.collection_name)
+    return add_collection(
+        request.collection_name  # required singular name
+    )
 
 
 @crud_router.post("/delete_collection")
 async def delete_collection(
-    token: str = Header(default=NO_TOKEN, convert_underscores=False),
-    request: AddCollectionRequest = Body(...)
+        token: str = Header(default=NO_TOKEN, convert_underscores=False),
+        request: AddCollectionRequest = Body(...)
 ):
+    """
+    Removes collection
+    :param token:
+    :param request:
+    :return:
+    """
     if not verify_token(token):
         raise HTTPException(status_code=403, detail="Invalid token")
-    return remove_collection(request.collection_name)
+    return remove_collection(
+        request.collection_name  # required singular name
+    )

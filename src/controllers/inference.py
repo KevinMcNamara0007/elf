@@ -1,7 +1,6 @@
 from fastapi import APIRouter, HTTPException, Header, Body
 from starlette import status
 from starlette.responses import StreamingResponse
-
 from src.authentication.authentication import verify_token
 from src.modeling.request_models import AskExpertRequest, ClassifyRequest, SemanticSearchRequest, Message
 from src.services.inference import get_expert_response, prompt_classification, get_expert_response_stream
@@ -24,6 +23,12 @@ async def ask_an_expert(
         token: str = Header(default=NO_TOKEN, convert_underscores=False),
         request: AskExpertRequest = Body(...)
 ):
+    """
+    Ask any question to one of the LLMs.
+    :param token:
+    :param request:
+    :return:
+    """
     assert verify_token(token)
     history = request.messages or []
 
@@ -36,11 +41,11 @@ async def ask_an_expert(
         raise HTTPException(status_code=400, detail="Provide Messages, Prompt or both.")
 
     return await get_expert_response(
-        rules=request.rules,
-        messages=history,
-        temperature=request.temperature,
-        top_k=request.top_k,
-        top_p=request.top_p,
+        rules=request.rules,  # optional the role the LLM should play.
+        messages=history,  # optional must be formatted "[{"role": "system", "content": "system prompt"}]"
+        temperature=request.temperature, # optional temperature of the LLM
+        top_k=request.top_k,  # optional Number of words to consider for next token
+        top_p=request.top_p,  # optional Percentage to limit next token generation to
     )
 
 
@@ -63,11 +68,11 @@ async def ask_an_expert(
     # Stream the result directly from the get_expert_response_stream function
     return StreamingResponse(
         get_expert_response_stream(
-            rules=request.rules,
-            messages=history,
-            temperature=request.temperature,
-            top_k=request.top_k,
-            top_p=request.top_p,
+            rules=request.rules,  # optional the role the LLM should play.
+            messages=history,  # optional must be formatted "[{"role": "system", "content": "system prompt"}]"
+            temperature=request.temperature,  # optional temperature of the LLM
+            top_k=request.top_k,  # optional Number of words to consider for next token
+            top_p=request.top_p,  # optional Percentage to limit next token generation to
         ),
         media_type="text/plain"
     )
@@ -78,8 +83,16 @@ async def determine_expert(
         token: str = Header(default=NO_TOKEN, convert_underscores=False),
         request: ClassifyRequest = Body(...)
 ):
+    """
+    Classify your prompt.
+    :param token:
+    :param request:
+    :return:
+    """
     assert verify_token(token)
-    return await prompt_classification(request.prompt)
+    return await prompt_classification(
+        request.prompt  # required prompt to classify
+    )
 
 
 @inference_router.post("/semantic_search", status_code=status.HTTP_200_OK, description="Semantic search.")
@@ -88,4 +101,8 @@ async def semantic_search(
         request: SemanticSearchRequest = Body(...)
 ):
     assert verify_token(token)
-    return query_record(request.query, request.collection_name, request.max_results)
+    return query_record(
+        request.query,  # required prompt to query against
+        request.collection_name,   # required collection to retrieve records from
+        request.max_results  # optional max number of results to return
+    )
