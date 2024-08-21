@@ -1,4 +1,5 @@
 import json
+import math
 import httpx
 import numpy as np
 import requests
@@ -121,6 +122,69 @@ async def fetch_llama_cpp_response(rules, messages, temperature, key, top_k=40, 
             response_data = expert_response.json()
         return response_data
     except httpx.RequestError as e:
+        print("Network Error:", str(e))
+        raise HTTPException(status_code=500, detail=f"Network error while fetching response from llama.cpp: {e}")
+    except Exception as exc:
+        print("Response Error:", str(exc))
+        raise HTTPException(status_code=500, detail=f"Could not fetch response from llama.cpp: {exc.args}")
+
+
+async def fetch_pro(prompt, output_tokens, key):
+    """
+    Sends request to llama-server for inference
+    """
+    global BALANCER_MAX_OPTION
+    global CURRENT_BALANCER_SELECTION
+    llama = f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>{prompt}<|start_header_id|>user<|end_header_id|><|eot_id|>assistant"
+    try:
+        expert_urls = load_model(key)
+        payload = {
+            "prompt": llama,
+            "stream": False,
+            "n_predict": math.ceil(output_tokens),
+            "temperature": 0.8,
+            "stop":
+                ["</s>",
+                 "<|end|>",
+                 "<|eot_id|>",
+                 "<|end_of_text|>",
+                 "<|im_end|>",
+                 "<|EOT|>",
+                 "<|END_OF_TURN_TOKEN|>",
+                 "<|end_of_turn|>",
+                 "<|endoftext|>",
+                 "assistant",
+                 "user"],
+            "repeat_last_n":0,
+            "repeat_penalty":1,
+            "penalize_nl":False,
+            "top_k":0,
+            "top_p":1,
+            "min_p":0.05,
+            "tfs_z":1,
+            "typical_p":1,
+            "presence_penalty":0,
+            "frequency_penalty":0,
+            "mirostat":0,
+            "mirostat_tau":5,
+            "mirostat_eta":0.1,
+            "grammar":"",
+            "n_probs":0,
+            "min_keep":0,
+            "image_data":[],
+            "cache_prompt":False,
+            "api_key":""
+        }
+
+        expert_url = f"{expert_urls[CURRENT_BALANCER_SELECTION]}/completion"
+        CURRENT_BALANCER_SELECTION = (CURRENT_BALANCER_SELECTION + 1) % BALANCER_MAX_OPTION
+        async with httpx.AsyncClient(timeout=500) as client:
+            expert_response = await client.post(expert_url, json=payload)
+            expert_response.raise_for_status()
+            response_data = expert_response.json()
+        return response_data
+    except httpx.RequestError as e:
+        print(e)
         print("Network Error:", str(e))
         raise HTTPException(status_code=500, detail=f"Network error while fetching response from llama.cpp: {e}")
     except Exception as exc:

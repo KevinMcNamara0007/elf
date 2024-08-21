@@ -2,8 +2,8 @@ from fastapi import APIRouter, HTTPException, Header, Body
 from starlette import status
 from starlette.responses import StreamingResponse
 from src.authentication.authentication import verify_token
-from src.modeling.request_models import AskExpertRequest, ClassifyRequest, SemanticSearchRequest, Message
-from src.services.inference import get_expert_response, prompt_classification, get_expert_response_stream
+from src.modeling.request_models import AskExpertRequest, ClassifyRequest, SemanticSearchRequest, Message, Pro
+from src.services.inference import get_expert_response, prompt_classification, get_expert_response_stream, get_pro_response
 from src.utilities.crud import query_record
 from src.utilities.general import NO_TOKEN
 
@@ -76,6 +76,28 @@ async def ask_an_expert(
         ),
         media_type="text/plain"
     )
+
+
+@inference_router.post("/ask_a_pro", status_code=status.HTTP_200_OK, description="Digital Professional Instructions")
+async def ask_a_pro(
+        token: str = Header(default=NO_TOKEN, convert_underscores=False),
+        request: Pro = Body(...)
+):
+    """
+    Ask any question to one of the LLMs.
+    :param token:
+    :param request:
+    :return:
+    """
+    assert verify_token(token)
+
+    if request.prompt:
+        return await get_pro_response(
+            prompt=request.prompt,  # optional the role the LLM should play.
+            output_tokens = request.output_tokens
+        )
+    else:
+        raise HTTPException(status_code=400, detail="Provide a prompt")
 
 
 @inference_router.post("/classify", status_code=status.HTTP_200_OK, description="Classify your prompt.")

@@ -54,3 +54,8 @@ class SemanticSearchRequest(BaseModel):
     query: str
     collection_name: str
     max_results: int = 5
+
+
+class Pro(BaseModel):
+    prompt: str
+    output_tokens: float = 2000
