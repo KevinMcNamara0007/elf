@@ -1,9 +1,12 @@
-from src.utilities.general import start_llama_cpp, stop_aux_servers, HOST, UVICORN_PORT, handle_sigterm, start_chroma_db
+from src.utilities.general import start_llama_cpp, stop_aux_servers, HOST, UVICORN_PORT, handle_sigterm, \
+    start_chroma_db, download_install_vision_model
+print("Ensuring Vision Model is operable...")
+download_install_vision_model()
 print("Starting Llama.cpp")
 start_llama_cpp()
 print("Starting ChromaDB")
 start_chroma_db()
-print("Started aux servers...Starting FastAPI")
+print("Starting FastAPI application...")
 from contextlib import asynccontextmanager
 import signal
 import uvicorn

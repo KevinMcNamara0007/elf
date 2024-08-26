@@ -1,11 +1,12 @@
-import json
 import math
 import httpx
 import numpy as np
 import requests
+import onnx
 from fastapi import HTTPException
 from src.utilities.general import (classifications, CONTEXT_WINDOW, tokenizer, classifier,
-                                   NUMBER_OF_SERVERS, CHAT_TEMPLATE, LLAMA3_TEMPLATE, CHATML_TEMPLATE)
+                                   NUMBER_OF_SERVERS, CHAT_TEMPLATE, LLAMA3_TEMPLATE, CHATML_TEMPLATE,
+                                   VISION_MODEL_PATH)
 
 
 def load_model(key):
@@ -241,3 +242,7 @@ def get_free_url(urls):
     except Exception as exc:
         print(str(exc))
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+async def fetch_vision_response(prompt, image):
+    model = onnx

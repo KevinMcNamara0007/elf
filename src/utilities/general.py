@@ -17,13 +17,15 @@ CHROMA_SERVER_PID = None
 
 # Import ENV Vars
 load_dotenv(os.getenv("ENV", "config/.env-dev"))
+# Assign ENV Vars
 SPLIT_SYMBOL = os.getenv("SPLIT_SYMBOL")
-general_model_path = os.getenv("general")
-programming_model_path = os.getenv("programming")
-classifier_tokenizer = os.getenv("classifier_tokenizer")
-classifier_model = os.getenv("classifier_model")
-stt_model_path = os.getenv("stt_model_path")
-vision_model_path = os.getenv("vision_model_path")
+# Model Paths
+MODEL_DIR = os.getenv("MODEL_DIR")
+GENERAL_MODEL_PATH = f"{MODEL_DIR}/{os.getenv('GENERAL_MODEL')}"
+VISION_MODEL_PATH = f"{MODEL_DIR}/{os.getenv('VISION_MODEL')}"
+CLASSIFIER_TOKENIZER = os.getenv("CLASSIFIER_TOKENIZER")
+CLASSIFIER_MODEL = os.getenv("CLASSIFIER_MODEL")
+# Model configurations
 CONTEXT_WINDOW = os.getenv("CONTEXT_WINDOW")
 INPUT_WINDOW = int(os.getenv("INPUT_WINDOW"))
 HOST = os.getenv("HOST")
@@ -33,7 +35,8 @@ LLAMA_SOURCE_FOLDER = os.path.join(os.getcwd(), os.getenv("LLAMA_SOURCE_FOLDER")
 LLAMA_PORT = int(UVICORN_PORT) + 1
 LLAMA_CPP_ENDPOINT = f"http://{HOST}:{LLAMA_PORT}/completion"
 MAIN_GPU_INDEX = os.getenv("MAIN_GPU_INDEX")
-GENERAL_MODEL_PATH = os.path.join(os.getcwd(), general_model_path)
+GENERAL_MODEL_PATH = os.path.join(os.getcwd(), GENERAL_MODEL_PATH)
+VISION_MODEL_PATH = os.path.join(os.getcwd(), VISION_MODEL_PATH)
 NUMBER_OF_CORES = multiprocessing.cpu_count()
 WORKERS = f"-j {NUMBER_OF_CORES - 2}" if NUMBER_OF_CORES > 2 else ""
 PLATFORM = platform.system()
@@ -51,7 +54,7 @@ CHROMA_PORT = NUMBER_OF_SERVERS + LLAMA_PORT
 CHATML_TEMPLATE = os.getenv("CHATML_TEMPLATE")
 LLAMA3_TEMPLATE = os.getenv("LLAMA3_TEMPLATE")
 
-CHAT_TEMPLATE = LLAMA3_TEMPLATE if "LLAMA" in general_model_path.upper() else CHATML_TEMPLATE
+CHAT_TEMPLATE = LLAMA3_TEMPLATE if "LLAMA" in GENERAL_MODEL_PATH.upper() else CHATML_TEMPLATE
 
 
 # Function to ensure llama.cpp repository exists
@@ -321,15 +324,22 @@ def start_chroma_db(chroma_db_path=CHROMA_DATA_PATH):
     os.chdir(cwd)
 
 
-
-
+def download_install_vision_model():
+    if not os.path.exists(VISION_MODEL_PATH):
+        subprocess.run([
+            "huggingface-cli",
+            "download", "microsoft/Phi-3-vision-128k-instruct-onnx-cpu",
+            "--include", "cpu-int4-rtn-block-32-acc-level-4/*",
+            "--local-dir", '/'.join(VISION_MODEL_PATH.split('/')[:-1]),
+        ], check=True
+        )
 
 # Load the tokenizer
-with open(classifier_tokenizer, 'rb') as handle:
+with open(CLASSIFIER_TOKENIZER, 'rb') as handle:
     tokenizer = pickle.load(handle)
 
 # Load the ONNX model
-classifier = ort.InferenceSession(classifier_model)
+classifier = ort.InferenceSession(CLASSIFIER_MODEL)
 
 # Available Classifications
 classifications = {
