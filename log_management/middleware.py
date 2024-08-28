@@ -7,13 +7,11 @@ from starlette.requests import Request
 
 class CacheRequestBodyMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        # Cache the body
-        request.state.body = await request.body()
+        # Read and cache the body
+        body = await request.body()
+        request.state.body = body
 
-        # Restore the request stream
-        async def receive():
-            return {"type": "http.request", "body": request.state.body, "more_body": False}
-
+        # Proceed with the request
         response = await call_next(request)
         return response
 

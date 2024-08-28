@@ -1,28 +1,30 @@
+import json
 import sys
 from typing import Union
 from fastapi import Request
 from fastapi.exceptions import RequestValidationError, HTTPException
 from fastapi.exception_handlers import http_exception_handler as _http_exception_handler
-from fastapi.exception_handlers import (
-    request_validation_exception_handler as _request_validation_exception_handler
-)
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from log_management.logger import logger
 
 
 async def request_validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
     """
-    This is a wrapper to the default RequestValidationException handler of FastAPI.
-    This function will be called when client input is not valid.
+    Custom exception handler for request validation errors.
     :param request:
     :param exc:
     :return:
     """
-    body = request.state.body  # Use cached body instead of reading it again
-    query_params = request.query_params._dict  # pylint: disable=protected-access
-    detail = {"errors": exc.errors(), "body": body.decode(), "query_params": query_params}
+    body = getattr(request.state, 'body', b'')  # Use cached body if available, default to empty bytes
+    query_params = dict(request.query_params)  # Convert to dict for easier handling
+    try:
+        body_text = body.decode('utf-8')
+    except UnicodeDecodeError:
+        body_text = "<binary data>"
+
+    detail = {"errors": exc.errors(), "body": body_text, "query_params": query_params}
     logger.info(detail)
-    return await _request_validation_exception_handler(request, exc)
+    return JSONResponse(status_code=400, content=json.dumps(detail))
 
 
 async def http_exception_handler(request: Request, exc: HTTPException) -> Union[JSONResponse, Response]:

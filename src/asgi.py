@@ -1,32 +1,18 @@
-from src.utilities.general import start_llama_cpp, stop_aux_servers, HOST, UVICORN_PORT, handle_sigterm, \
-    start_chroma_db, download_install_vision_model
-print("Ensuring Vision Model is operable...")
-download_install_vision_model()
-print("Starting Llama.cpp")
-start_llama_cpp()
-print("Starting ChromaDB")
-start_chroma_db()
-print("Starting FastAPI application...")
-from contextlib import asynccontextmanager
-import signal
+from src.utilities.general import download_vision_model, build_onnx_runtime_genai
+print("Checking onnxruntime-genai install...")
+build_onnx_runtime_genai()
+print("Ensuring onnx model is available...")
+download_vision_model()
 import uvicorn
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException
 from starlette.responses import RedirectResponse
-from src.controllers import inference, crud
-from src.utilities.exception_handlers import request_validation_exception_handler, http_exception_handler, \
+from src.controllers import images
+from log_management.exception_handlers import request_validation_exception_handler, http_exception_handler, \
     unhandled_exception_handler
 from log_management.middleware import log_request_middleware, CacheRequestBodyMiddleware
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    try:
-        yield
-    finally:
-        stop_aux_servers()
 
 
 elf = FastAPI(
@@ -36,13 +22,12 @@ elf = FastAPI(
     swagger_ui_parameters={
         "syntaxHighlight.theme": "obsidian",
         "docExpansion": "none"
-    },
-    lifespan=lifespan,
+    }
 )
 
 # Include Routers
-elf.include_router(inference.inference_router)
-elf.include_router(crud.crud_router)
+elf.include_router(images.images_router)
+
 
 # CORS Fixes
 elf.add_middleware(
@@ -65,7 +50,5 @@ async def docs_redirect():
     return RedirectResponse(url="/docs")
 
 
-signal.signal(signal.SIGTERM, handle_sigterm)
-
 if __name__ == "__main__":
-    uvicorn.run(elf, host=HOST, port=int(UVICORN_PORT))
+    uvicorn.run(elf, host="127.0.0.1", port=int(8000))

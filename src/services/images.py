@@ -1,28 +1,31 @@
-# import io
-#
-# import pytesseract
-# from PIL import Image
-# from fastapi import HTTPException
-#
-# from src.utilities.inference import image_processing
-#
-#
-# async def extract_text_from_image(img):
-#     try:
-#         image_bytes = await img.read()
-#         image = Image.open(io.BytesIO(image_bytes))
-#
-#         # convert image to grayscale
-#         image = image.convert("L")
-#
-#         # Extract text using preprocessed image and tesseract
-#         text = pytesseract.image_to_string(image, lang="eng")
-#         return text
-#     except Exception as exc:
-#         HTTPException(status_code=500, detail=f"Could not extract image: {exc}")
-#
-#
-# async def vision_for_images(prompt, img):
-#     image_bytes = await img.read()
-#     image = Image.open(io.BytesIO(image_bytes))
-#     return await image_processing(prompt, image)
+import tempfile
+import onnxruntime_genai as og
+from src.utilities.inference import vision_inference
+
+
+async def vision_for_images(prompt, image=None):
+    """
+    Processes images and prompt to perform vision inference.
+
+    Args:
+        prompt (str): The text prompt for the model.
+        image (UploadFile): Image being passed to the model.
+
+    Returns:
+        str: Model response.
+    """
+    loaded_image = None
+    if image:
+        # Use a temporary file to store the image data
+        with tempfile.NamedTemporaryFile(delete=True, suffix=".jpg") as temp_file:
+            image_bytes = await image.read()
+            temp_file.write(image_bytes)
+            temp_file.flush()
+            loaded_image = og.Images.open(temp_file.name)
+
+    # Add image tags to the prompt
+    user_prompt = f"<|user|>\n{'<|image_1|>' if loaded_image else ''}\n{prompt}\n<|end|>\n<|assistant|>\n"
+    print(user_prompt)
+    response = vision_inference(user_prompt, loaded_image)
+
+    return response
