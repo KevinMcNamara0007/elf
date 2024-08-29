@@ -1,6 +1,6 @@
 import tempfile
 import onnxruntime_genai as og
-from src.utilities.inference import vision_inference
+from src.utilities.inference import vision_and_text_inference
 
 
 async def vision_for_images(prompt, image=None):
@@ -25,7 +25,6 @@ async def vision_for_images(prompt, image=None):
 
     # Add image tags to the prompt
     user_prompt = f"<|user|>\n{'<|image_1|>' if loaded_image else ''}\n{prompt}\n<|end|>\n<|assistant|>\n"
-    print(user_prompt)
-    response = vision_inference(user_prompt, loaded_image)
+    response = vision_and_text_inference(user_prompt, loaded_image)
 
     return response
