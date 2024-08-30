@@ -16,4 +16,9 @@ inference_router = APIRouter(
 async def ask_an_expert(
         prompt: str = Body(...)
 ):
+    """
+    Inference endpoint for asking an expert.
+    :param prompt:
+    :return:
+    """
     return await vision_text_inference(prompt)
