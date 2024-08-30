@@ -1,7 +1,7 @@
 import onnxruntime_genai as og
 from fastapi import HTTPException
 
-from src.utilities.general import vision_processor, vision_model, vision_tokenizer
+from src.utilities.general import onnx_model_dir
 
 
 def vision_and_text_inference(prompt, image):
@@ -53,3 +53,9 @@ def text_inference(prompt):
     except Exception as e:
         print("Error during text inference:", str(e))
         raise HTTPException(status_code=500, detail="An error occurred during text inference.")
+
+
+# Initialize model, processor, and tokenizer
+vision_model = og.Model(onnx_model_dir)
+vision_processor = vision_model.create_multimodal_processor()
+vision_tokenizer = vision_processor.create_stream()
