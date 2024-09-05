@@ -40,7 +40,7 @@ API_TOKENS = os.getenv("API_TOKENS")
 NO_TOKEN = "No Token was provided."
 API_TOKENS = API_TOKENS.split(",")
 LLAMA_CPP_ENDPOINTS = []
-LLAMA_CPP_PATH = os.path.join(LLAMA_CPP_HOME, "bin/Release/llama-server")
+LLAMA_CPP_PATH = os.path.join(LLAMA_CPP_HOME, "bin/llama-server")
 CHROMA_DATA_PATH = os.getenv("CHROMA_DATA_PATH")
 CHROMA_PORT = NUMBER_OF_SERVERS + LLAMA_PORT
 CHATML_TEMPLATE = os.getenv("CHATML_TEMPLATE")
@@ -59,20 +59,6 @@ def remove_directory(dir_path):
             print(f"Directory '{dir_path}' removed successfully.")
         except OSError as e:
             print(f"Error: {dir_path} : {e.strerror}")
-
-
-def check_possible_paths():
-    """
-    Check the possible paths of the llama-server
-    Inconsistencies across platforms are rectified in this method.
-    """
-    global LLAMA_CPP_PATH
-    if not os.path.exists(LLAMA_CPP_PATH):
-        split_path = LLAMA_CPP_PATH.split("Release/")
-        LLAMA_CPP_PATH = os.path.join(split_path[0], split_path[1])
-        if not os.path.exists(LLAMA_CPP_PATH):
-            return ""
-    return LLAMA_CPP_PATH
 
 
 def start_llama_cpp():

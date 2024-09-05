@@ -16,7 +16,8 @@ RUN apt-get update && \
     git \
     cmake \
     python3 \
-    python3-pip
+    python3-pip \
+    nvidia-container-toolkit
 
 # Clone the llama.cpp repository
 RUN git clone https://github.com/ggerganov/llama.cpp.git ${LLAMA_SOURCE_FOLDER}
@@ -45,6 +46,10 @@ RUN cmake -S ${LLAMA_SOURCE_FOLDER} -B . \
     -DCMAKE_INSTALL_RPATH=/usr/local/cuda/lib64
 
 RUN cmake --build . --config Release --target llama-server -j$(nproc)
+
+RUN nvidia-ctk runtime configure --runtime=docker && systemctl restart docker
+
+FROM env-build AS app
 
 WORKDIR /app
 
