@@ -1,5 +1,4 @@
-import math
-from src.utilities.general import classifications, INPUT_WINDOW
+from src.utilities.general import classifications
 from src.utilities.inference import fetch_llama_cpp_response, classify_prompt, fetch_llama_cpp_response_stream, fetch_pro
 
 

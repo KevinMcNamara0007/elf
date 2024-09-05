@@ -8,12 +8,7 @@ from dotenv import load_dotenv
 import onnxruntime as ort
 import time
 import requests
-import psutil
 
-# Global LLAMA_SERVER_PID variable
-LLAMA_SERVER_PID = None
-
-CHROMA_SERVER_PID = None
 
 # Import ENV Vars
 load_dotenv(os.getenv("ENV", "config/.env-dev"))
@@ -54,16 +49,6 @@ LLAMA3_TEMPLATE = os.getenv("LLAMA3_TEMPLATE")
 CHAT_TEMPLATE = LLAMA3_TEMPLATE if "LLAMA" in general_model_path.upper() else CHATML_TEMPLATE
 
 
-# Function to ensure llama.cpp repository exists
-def ensure_llama_cpp_repository():
-    """
-    Check if Git repository exists and clone if it doesn't
-    """
-    if not os.path.exists(os.path.join(LLAMA_SOURCE_FOLDER, ".git")):
-        remove_directory(LLAMA_SOURCE_FOLDER)
-        subprocess.run(["git", "clone", "https://github.com/ggerganov/llama.cpp.git", LLAMA_SOURCE_FOLDER], check=True)
-
-
 def remove_directory(dir_path):
     """
     Remove a directory recursively
@@ -74,46 +59,6 @@ def remove_directory(dir_path):
             print(f"Directory '{dir_path}' removed successfully.")
         except OSError as e:
             print(f"Error: {dir_path} : {e.strerror}")
-
-
-def compile_llama_cpp():
-    """
-    Compiles the llama-server using cmake and GPU acceleration (if available)
-    """
-    global LLAMA_CPP_PATH
-    LLAMA_CPP_PATH = check_possible_paths()
-    # Ensure LLAMA_CPP_HOME directory exists
-    if LLAMA_CPP_PATH == "":
-        # Change directory to LLAMA_CPP_HOME
-        remove_directory(LLAMA_CPP_HOME)
-        os.makedirs(LLAMA_CPP_HOME, exist_ok=True)
-        os.chdir(LLAMA_CPP_HOME)
-
-        # Configure CMake
-        gpu_support = "-DGGML_CUDA=ON" if platform.system() != "Darwin" else "-DGGML_METAL=ON"  # Adjust as needed based on your setup
-        try:
-            source_command = subprocess.run(
-                ["cmake", "..", "-B", ".", "-S", LLAMA_SOURCE_FOLDER, gpu_support],
-                check=True,
-                capture_output=True,
-            )
-            print(source_command.stdout.decode())
-            print(source_command.stderr.decode())
-
-            # Build llama-server target
-            build_command = subprocess.run(
-                ["cmake", "--build", ".", "--config", "Release", "--target", "llama-server", WORKERS],
-                check=True,
-                capture_output=True,
-            )
-            print(build_command.stdout.decode())
-            print(build_command.stderr.decode())
-            LLAMA_CPP_PATH = check_possible_paths()
-            if LLAMA_CPP_PATH == "":
-                raise ConnectionError("Could not find llama-server.")
-        except subprocess.CalledProcessError as e:
-            print(f"Error during cmake or build process: {e}")
-            raise e
 
 
 def check_possible_paths():
@@ -134,13 +79,6 @@ def start_llama_cpp():
     """
     Orchestrates the start of llama-server with all of its requirements
     """
-    global LLAMA_SERVER_PID
-    # Ensure llama.cpp repository exists
-    ensure_llama_cpp_repository()
-    for i in range(NUMBER_OF_SERVERS):
-        kill_process_on_port(LLAMA_PORT + i)
-    # Compile the folder
-    compile_llama_cpp()
     # Change working directory to LLAMA_CPP_HOME for starting llama-server
     cwd = os.getcwd()
     os.chdir(LLAMA_CPP_HOME)
@@ -148,7 +86,6 @@ def start_llama_cpp():
     processes_ports = spin_up_server(number_of_servers=NUMBER_OF_SERVERS)
     # check health of all servers
     check_server_health(processes_ports)
-    LLAMA_SERVER_PID = processes_ports
     # Create a list of available servers
     for process_port in processes_ports:
         LLAMA_CPP_ENDPOINTS.append(f"http://{HOST}:{process_port[1]}")
@@ -206,58 +143,10 @@ def spin_up_server(number_of_servers):
             # logical maximum batch size (default: 2048)
             "--ubatch-size", str(UBATCH_SIZE) if number_of_servers == 1 else str(UBATCH_SIZE // number_of_servers),
             # physical maximum batch size (default: 512)
-            # "--chat-template", CHAT_TEMPLATE,
             "--conversation",
         ]
         processes_ports.append((subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE), PORT))
     return processes_ports
-
-
-def stop_aux_servers():
-    """
-    Kills all llama-servers
-    """
-    global LLAMA_SERVER_PID
-    global CHROMA_SERVER_PID
-    if LLAMA_SERVER_PID:
-        for pid_port in LLAMA_SERVER_PID:
-            kill_process_on_port(pid_port[1])
-        LLAMA_SERVER_PID = None
-    if CHROMA_SERVER_PID:
-        kill_process_on_port(CHROMA_PORT)
-        CHROMA_SERVER_PID = None
-
-
-def kill_process_on_port(port):
-    """
-    Kills a process on a given port
-    """
-    # Iterate over all the network connections
-    for conn in psutil.net_connections():
-        if conn.laddr.port == port:
-            pid = conn.pid
-            if pid:
-                try:
-                    # Kill the process
-                    os.kill(pid, 9)
-                    print(f"Process {pid} on port {port} has been killed.")
-                except Exception as e:
-                    print(f"Failed to kill process {pid} on port {port}: {e}")
-            else:
-                print(f"No process found running on port {port}.")
-            return
-
-    print(f"No process found running on port {port}.")
-
-
-# Capture SIGTERM signal to stop llama-server
-def handle_sigterm(signum, frame):
-    """
-    Listens for SIGTERM and kills llama-servers
-    """
-    kill_process_on_port(CHROMA_PORT)
-    stop_aux_servers()
-    exit(0)
 
 
 def replace_port_in_url(url, new_port):
@@ -280,12 +169,10 @@ def start_chroma_db(chroma_db_path=CHROMA_DATA_PATH):
     """
     Starts the ChromaDB server and verifies its startup.
     """
-    global CHROMA_SERVER_PID
     cwd = os.getcwd()
     os.makedirs(chroma_db_path, exist_ok=True)
     os.chdir(chroma_db_path)
     # Kill any existing process on the ChromaDB port
-    kill_process_on_port(CHROMA_PORT)
 
     # Command to start ChromaDB server
     command = [

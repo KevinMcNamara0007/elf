@@ -1,11 +1,10 @@
-import json
 import math
 import httpx
 import numpy as np
 import requests
 from fastapi import HTTPException
-from src.utilities.general import (classifications, CONTEXT_WINDOW, tokenizer, classifier,
-                                   NUMBER_OF_SERVERS, CHAT_TEMPLATE, LLAMA3_TEMPLATE, CHATML_TEMPLATE)
+from src.utilities.general import (classifications, tokenizer, classifier,
+                                   NUMBER_OF_SERVERS, CHATML_TEMPLATE)
 
 
 def load_model(key):
