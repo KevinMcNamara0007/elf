@@ -16,8 +16,7 @@ RUN apt-get update && \
     git \
     cmake \
     python3 \
-    python3-pip \
-    nvidia-container-toolkit
+    python3-pip
 
 # Clone the llama.cpp repository
 RUN git clone https://github.com/ggerganov/llama.cpp.git ${LLAMA_SOURCE_FOLDER}
@@ -25,7 +24,8 @@ RUN git clone https://github.com/ggerganov/llama.cpp.git ${LLAMA_SOURCE_FOLDER}
 # Upgrade pip and install Python packages
 RUN pip install --upgrade pip setuptools wheel
 
-RUN pip install keras==2.15.0 tensorflow==2.15.0
+RUN pip install keras==2.15.0
+RUN pip install tensorflow==2.15.0
 
 # Set the working directory to the compiled llama_cpp folder
 WORKDIR ${LLAMA_CPP_HOME}
@@ -46,8 +46,6 @@ RUN cmake -S ${LLAMA_SOURCE_FOLDER} -B . \
     -DCMAKE_INSTALL_RPATH=/usr/local/cuda/lib64
 
 RUN cmake --build . --config Release --target llama-server -j$(nproc)
-
-RUN nvidia-ctk runtime configure --runtime=docker && systemctl restart docker
 
 FROM env-build AS app
 
