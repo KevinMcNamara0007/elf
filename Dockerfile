@@ -16,7 +16,8 @@ RUN apt-get update && \
     git \
     cmake \
     python3 \
-    python3-pip
+    python3-pip \
+    curl
 
 # Clone the llama.cpp repository
 RUN git clone https://github.com/ggerganov/llama.cpp.git ${LLAMA_SOURCE_FOLDER}
@@ -53,10 +54,10 @@ WORKDIR /app
 
 COPY . .
 
-RUN pip install -r requirements.txt
+RUN pip install -r requirements-app.txt
 
 # Expose the necessary port (if applicable)
-EXPOSE 8000 8001 8002 8003 8004 8005 8006 8007 8008 8009 8010
+EXPOSE 8000-8010
 
 # Set the entry point (if needed)
 CMD ["uvicorn", "src.asgi:elf", "--host=0.0.0.0", "--port=8000"]
