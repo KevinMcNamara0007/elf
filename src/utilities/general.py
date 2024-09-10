@@ -14,15 +14,12 @@ import requests
 load_dotenv(os.getenv("ENV", "config/.env-dev"))
 SPLIT_SYMBOL = os.getenv("SPLIT_SYMBOL")
 general_model_path = os.getenv("general")
-programming_model_path = os.getenv("programming")
 classifier_tokenizer = os.getenv("classifier_tokenizer")
 classifier_model = os.getenv("classifier_model")
-stt_model_path = os.getenv("stt_model_path")
-vision_model_path = os.getenv("vision_model_path")
 CONTEXT_WINDOW = os.getenv("CONTEXT_WINDOW")
 INPUT_WINDOW = int(os.getenv("INPUT_WINDOW"))
-HOST = os.getenv("HOST")
-UVICORN_PORT = os.getenv("UVICORN_PORT")
+HOST = os.getenv("HOST", "127.0.0.1")
+UVICORN_PORT = os.getenv("UVICORN_PORT", "8000")
 LLAMA_CPP_HOME = os.getenv("LLAMA_CPP_HOME", "/opt/cx_intelligence/aiaas/compiled_llama_cpp")
 LLAMA_SOURCE_FOLDER = os.path.join(os.getcwd(), os.getenv("LLAMA_SOURCE_FOLDER"))
 LLAMA_PORT = int(UVICORN_PORT) + 1
@@ -121,15 +118,12 @@ def spin_up_server(number_of_servers):
             "--port", str(PORT),
             "--model", GENERAL_MODEL_PATH,
             "--ctx-size", CONTEXT_WINDOW,
-            "--gpu-layers", GPU_LAYERS if number_of_servers == 1 else str(int(GPU_LAYERS) // number_of_servers),
-            # Number of GPU layers
             "--threads", str(NUMBER_OF_CORES) if number_of_servers == 1 else str(NUMBER_OF_CORES // number_of_servers),
             # Allowable threads for CPU operations
             "--batch-size", str(BATCH_SIZE) if number_of_servers == 1 else str(BATCH_SIZE // number_of_servers),
             # logical maximum batch size (default: 2048)
             "--ubatch-size", str(UBATCH_SIZE) if number_of_servers == 1 else str(UBATCH_SIZE // number_of_servers),
             # physical maximum batch size (default: 512)
-            "--conversation",
         ]
         processes_ports.append((subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE), PORT))
     return processes_ports

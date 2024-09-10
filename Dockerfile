@@ -1,49 +1,54 @@
-# Use Python base image
-FROM python:3.10-slim-bookworm AS env-build
+# Base image with Ubuntu 22.04
+FROM ubuntu:22.04 AS env-build
 
-# Install build tools and dependencies, including Tcl
+# Environment variables for paths
+ENV LLAMA_CPP_HOME=/opt/cx_intelligence/aiaas/compiled_llama_cpp
+ENV LLAMA_SOURCE_FOLDER=/opt/cx_intelligence/aiaas/llama_source
+
+# Create necessary directories
+RUN mkdir -p ${LLAMA_SOURCE_FOLDER} && mkdir -p ${LLAMA_CPP_HOME}
+
+# Install build tools and dependencies
 RUN apt-get update && \
     apt-get install -y \
     build-essential \
     git \
     cmake \
-    wget \
-    python3-dev \
-    unzip \
-    tcl
+    python3 \
+    python3-pip \
+    libopenblas-dev
 
-# Download official SQLite amalgamation files (version 3460100)
-WORKDIR /opt/sqlite
-RUN wget https://www.sqlite.org/2024/sqlite-amalgamation-3460100.zip && \
-    unzip sqlite-amalgamation-3460100.zip
+# Clone the llama.cpp repository
+RUN git clone https://github.com/ggerganov/llama.cpp.git ${LLAMA_SOURCE_FOLDER}
 
-# Clone the pysqlite3 repository
-RUN git clone https://github.com/coleifer/pysqlite3.git /opt/cx_intelligence/aiaas/pysqlite3
+# Upgrade pip and install Python packages
+RUN pip install --upgrade pip setuptools wheel
 
-# Copy SQLite amalgamation files into pysqlite3
-RUN cp /opt/sqlite/sqlite-amalgamation-3460100/sqlite3.[ch] /opt/cx_intelligence/aiaas/pysqlite3/
+# Install CPU-only versions of TensorFlow and Keras
+RUN pip install keras==2.15.0 tensorflow-cpu==2.15.0 pysqlite3-binary
 
-# Build pysqlite3 statically linked with SQLite
-WORKDIR /opt/cx_intelligence/aiaas/pysqlite3
-RUN python setup.py build_static build
+# Set the working directory to the compiled llama_cpp folder
+WORKDIR ${LLAMA_CPP_HOME}
 
-RUN pip install keras==2.15.0
-RUN pip install tensorflow==2.15.0
+# Build llama.cpp with OpenBLAS support (no GPU, CPU optimized)
+RUN cmake -S ${LLAMA_SOURCE_FOLDER} -B . \
+    -DGGML_OPENBLAS=ON \
+    -DCMAKE_BUILD_TYPE=Release
 
-# Switch to the application build stage
+RUN cmake --build . --config Release --target llama-server -j$(nproc)
+
+# Stage for application
 FROM env-build AS app
 
-# Set the working directory to /app
 WORKDIR /app
 
-# Copy project files
 COPY . .
 
-# Install Python dependencies from the requirements file
-RUN pip install --no-cache-dir -r requirements.txt
+# Install project requirements
+RUN pip install -r requirements.txt
 
-# Expose necessary ports
+# Expose the necessary port (if applicable)
 EXPOSE 8000-8010
 
-# Set the entry point for FastAPI app
+# Set the entry point (if needed)
 CMD ["uvicorn", "src.asgi:elf", "--host=0.0.0.0", "--port=8000"]

@@ -15,4 +15,3 @@ psutil~=6.0.0
 onnx~=1.16.1
 httpx
 chromadb
-pysqlite3-binary
