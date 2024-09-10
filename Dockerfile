@@ -16,7 +16,8 @@ RUN apt-get update && \
     cmake \
     python3 \
     python3-pip \
-    libopenblas-dev
+    libopenblas-dev \
+    curl
 
 # Clone the llama.cpp repository
 RUN git clone https://github.com/ggerganov/llama.cpp.git ${LLAMA_SOURCE_FOLDER}
