@@ -1,15 +1,14 @@
 import os
-import subprocess
-import urllib.request
-import tarfile
 import shutil
-import onnxruntime as ort
+import subprocess
+import platform
+import sys
 
 onnxruntime_genai_repo = "https://github.com/microsoft/onnxruntime-genai"
-onnxruntime_release_url = "https://github.com/microsoft/onnxruntime/releases/download/v1.19.0/onnxruntime-osx-universal2-1.19.0.tgz"
-onnxruntime_tar = "onnxruntime-osx-universal2-1.19.0.tar.gz"
-onnxruntime_dir = "onnxruntime-osx-universal2-1.19.0"
-ort_dir = "onnxruntime-genai/ort"
+onnxruntime_repo = "https://github.com/microsoft/onnxruntime"
+onnxruntime_genai_dir = "onnxruntime-genai"
+onnxruntime_dir = "onnxruntime"
+ort_dir = os.path.join(onnxruntime_genai_dir, "ort")
 
 
 def clone_repo(repo_url, repo_dir):
@@ -19,74 +18,125 @@ def clone_repo(repo_url, repo_dir):
         print(f"{repo_dir} already exists. Skipping clone")
 
 
-def download_release(url, filename):
-    if not os.path.exists(filename):
-        print(f"Downloading {url} to {filename}")
-        try:
-            urllib.request.urlretrieve(url, filename)
-        except Exception as e:
-            print(e)
-            exit(1)
-    else:
-        print(f"{filename} already exists. Skipping download")
+def check_cuda():
+    try:
+        result = subprocess.run(["nvcc", "--version"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        return result.returncode == 0
+    except Exception as e:
+        print(str(e))
+        return False
 
 
-def extract_tar(filename, extract_path):
-    if not os.path.exists(extract_path):
-        print(f"Extracting {filename} to {extract_path}")
-        with tarfile.open(filename, "r:gz") as tar:
-            tar.extractall(extract_path)
-    else:
-        print(f"{filename} already exists. Skipping extract")
+def get_cuda_paths():
+    cuda_home = os.environ.get("CUDA_HOME", "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.4")
+    cudnn_home = os.environ.get("CUDNN_HOME", "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.4")
+    if not os.path.exists(cuda_home):
+        raise FileNotFoundError(f"CUDA home directory {cuda_home} does not exist")
+    if not os.path.exists(cudnn_home):
+        raise FileNotFoundError(f"cuDNN home directory {cudnn_home} does not exist")
+    return cuda_home, cudnn_home
 
 
-def move_onnxruntime_files(src_dir, dst_dir):
+
+def build_onnxruntime_windows(repo_dir, use_cuda=False):
+    os.chdir(repo_dir)
+    build_command = ["build.bat", "--build_shared_lib", "--skip_tests", "--parallel", "--config", "Release"]
+    if use_cuda:
+        cuda_home, cudnn_home = get_cuda_paths()
+        print(f"Using CUDA home: {cuda_home}")
+        print(f"Using cuDNN home: {cudnn_home}")
+        build_command.extend(["--use_cuda", f"--cuda_home={cuda_home}", f"--cudnn_home={cudnn_home}"])
+    subprocess.run(build_command, check=True)
+
+
+def build_onnxruntime_unix(repo_dir, use_cuda=False):
+    os.chdir(repo_dir)
+    build_command = ["build.sh", "--build_shared_lib", "--skip_tests", "--parallel", "--config", "Release"]
+    if use_cuda:
+        cuda_home, cudnn_home = get_cuda_paths()
+        build_command.extend(["--use_cuda", f"--cuda_home={cuda_home}", f"--cudnn_home={cudnn_home}"])
+    subprocess.run(build_command, check=True)
+
+
+def copy_built_onnxruntime_windows(src_dir, dst_dir):
+    os.chdir("..")
+    include_src = os.path.join(src_dir, "include", "onnxruntime", "core", "session")
+    lib_src = os.path.join(src_dir, "build", "Windows", "Release")
     if not os.path.exists(dst_dir):
         os.makedirs(dst_dir)
-    for item in os.listdir(src_dir):
-        s = os.path.join(src_dir, item)
-        d = os.path.join(dst_dir, item)
-        if os.path.isdir(s):
-            if os.path.isdir(s):
-                shutil.copytree(s, d, dirs_exist_ok=True)
-            else:
-                print(f"{s} already exists. Skipping copy")
-        else:
-            shutil.copy2(s, d)
+    include_dst = os.path.join(dst_dir, "include")
+    lib_dst = os.path.join(dst_dir, "lib")
+    if not os.path.exists(include_dst):
+        os.makedirs(include_dst)
+    if not os.path.exists(lib_dst):
+        os.makedirs(lib_dst)
+    shutil.copytree(include_src, os.path.join(include_dst, "onnxruntime"), dirs_exist_ok=True)
+    for file in os.listdir(lib_src):
+        if file.startswith("onnxruntime") and file.endswith(".dll"):
+            shutil.copy2(os.path.join(lib_src, file), lib_dst)
+        elif file.startswith("onnxruntime") and file.endswith(".lib"):
+            shutil.copy2(os.path.join(lib_src, file), lib_dst)
 
 
-def copy_pip_installed_onnxruntime(dest_dir):
-    ort_library_path = os.path.dirname(ort.__file__)
-    ort_include_path = os.path.join(ort_library_path, "include")
-    ort_lib_files = [f for f in os.listdir(ort_library_path) if f.endswith(".dylib")]
-    if not os.path.exists(dest_dir):
-        os.makedirs(dest_dir)
-    for lib_file in ort_lib_files:
-        shutil.copy2(os.path.join(ort_library_path, lib_file), os.path.join(dest_dir, "lib", lib_file))
-    if os.path.exists(ort_include_path):
-        shutil.copytree(ort_include_path, os.path.join(dest_dir, "include"))
+def copy_built_onnxruntime_unix(src_dir, dst_dir):
+    os.chdir("..")
+    include_src = os.path.join(src_dir, "include", "onnxruntime", "core", "session")
+    lib_src = os.path.join(src_dir, "build", "Linux", "Release") if platform.system() == "Linux" else os.path.join(src_dir, "build", "MacOS", "Release")
+    if not os.path.exists(dst_dir):
+        os.makedirs(dst_dir)
+    include_dst = os.path.join(dst_dir, "include")
+    lib_dst = os.path.join(dst_dir, "lib")
+    if not os.path.exists(include_dst):
+        os.makedirs(include_dst)
+    if not os.path.exists(lib_dst):
+        os.makedirs(lib_dst)
+    shutil.copytree(include_src, os.path.join(include_dst, "onnxruntime"), dirs_exist_ok=True)
+    for file in os.listdir(lib_src):
+        if file.startswith("libonnxruntime") and file.endswith(".so") or file.endswith(".dylib"):
+            shutil.copy2(os.path.join(lib_src, file), lib_dst)
 
 
 def build_onnxruntime_genai(repo_dir, ort_home=None):
     os.chdir(repo_dir)
-    build_command = ["python3", "build.py"]
-    if ort_home:
-        build_command.extend(["--ort_home", ort_home])
+    build_command = ["python", "build.py"] if platform.system() == "Windows" else ["python3", "build.py"]
     subprocess.run(build_command, check=True)
+
+def install_wheel(repo_dir):
+    wheel_dir = os.path.join(repo_dir, "build", "wheel")
+    if not os.path.exists(wheel_dir):
+        raise FileNotFoundError(f"Wheel directory {wheel_dir} does not exist.")
+    wheel_files = [f for f in os.listdir(wheel_dir) if f.endswith(".whl")]
+    if not wheel_files:
+        raise FileNotFoundError(f"No wheel files in {wheel_dir}")
+    wheel_path = os.path.join(wheel_dir, wheel_files[0])
+    install_command = [sys.executable,"-m", "pip", "install", wheel_path] if platform.system() == "Windows" else ["python3", "-m", "pip", "install", wheel_path]
+    subprocess.run(install_command, check=True)
+
 
 
 def main():
-    clone_repo(onnxruntime_genai_repo, "onnxruntime-genai")
+    # clone onnxruntime_genai repo
+    clone_repo(onnxruntime_genai_repo, onnxruntime_genai_dir)
+    # clone onnxruntime repo
+    clone_repo(onnxruntime_repo, onnxruntime_dir)
+    # check for cuda
+    use_cuda = check_cuda()
+    # build onnxruntime
+    if platform.system() == "Windows":
+        build_onnxruntime_windows(onnxruntime_dir, use_cuda)
+    else:
+        build_onnxruntime_unix(onnxruntime_dir, use_cuda)
+    # copy the build files
+    if platform.system() == "Windows":
+        copy_built_onnxruntime_windows(onnxruntime_dir, ort_dir)
+    else:
+        copy_built_onnxruntime_unix(onnxruntime_dir, ort_dir)
+    # build onnxruntime-genai
+    build_onnxruntime_genai(onnxruntime_genai_dir, ort_home=ort_dir)
+    # install the wheel
+    install_wheel(onnxruntime_genai_dir)
 
-    download_release(onnxruntime_release_url, onnxruntime_tar)
 
-    extract_tar(onnxruntime_tar, onnxruntime_dir)
-
-    move_onnxruntime_files(onnxruntime_dir, os.path.join("onnxruntime-genai", ort_dir))
-
-    copy_pip_installed_onnxruntime(os.path.join(ort_dir, "lib"))
-
-    build_onnxruntime_genai("onnxruntime-genai")
 
 
 if __name__ == "__main__":

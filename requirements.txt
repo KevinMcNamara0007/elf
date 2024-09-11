@@ -14,3 +14,5 @@ psutil~=6.0.0
 onnx~=1.16.1
 transformers==4.40.2
 huggingface-hub
+setuptools
+wheel
