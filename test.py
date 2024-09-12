@@ -1,143 +1,245 @@
 import os
-import shutil
 import subprocess
+import shutil
 import platform
-import sys
+import urllib.request
+import zipfile
+import tarfile
 
-onnxruntime_genai_repo = "https://github.com/microsoft/onnxruntime-genai"
-onnxruntime_repo = "https://github.com/microsoft/onnxruntime"
-onnxruntime_genai_dir = "onnxruntime-genai"
-onnxruntime_dir = "onnxruntime"
-ort_dir = os.path.join(onnxruntime_genai_dir, "ort")
+# Define constants
+REPO_URL = "https://github.com/microsoft/onnxruntime-genai"
+REPO_DIR = "onnxruntime-genai"
+ORT_DIR = os.path.join(REPO_DIR, "ort")
+SETUP_PY_DIR = os.path.join(REPO_DIR, "build", "Windows", "Release", "wheel")
+DIST_DIR = os.path.join(SETUP_PY_DIR, "dist")
 
+ONNX_RUNTIME_VERSIONS = {
+    "Windows": {
+        "cpu": {
+            "url": "https://github.com/microsoft/onnxruntime/releases/download/v1.19.2/onnxruntime-win-x64-1.19.2.zip",
+            "filename": "onnxruntime-win-x64-1.19.2.zip",
+            "extract": lambda file: _extract_zip(file, ORT_DIR),
+        },
+        "gpu": {
+            "url": "https://github.com/microsoft/onnxruntime/releases/download/v1.19.2/onnxruntime-win-x64-gpu-1.19.2.zip",
+            "filename": "onnxruntime-win-x64-gpu-1.19.2.zip",
+            "extract": lambda file: _extract_zip(file, ORT_DIR),
+        }
+    },
+    "Linux": {
+        "cpu": {
+            "url": "https://github.com/microsoft/onnxruntime/releases/download/v1.19.2/onnxruntime-linux-x64-1.19.2.tgz",
+            "filename": "onnxruntime-linux-x64-1.19.2.tgz",
+            "extract": lambda file: _extract_tar(file, ORT_DIR),
+        },
+        "gpu": {
+            "url": "https://github.com/microsoft/onnxruntime/releases/download/v1.19.2/onnxruntime-linux-x64-gpu-1.19.2.tgz",
+            "filename": "onnxruntime-linux-x64-gpu-1.19.2.tgz",
+            "extract": lambda file: _extract_tar(file, ORT_DIR),
+        }
+    },
+    "MacOS": {
+        "cpu": {
+            "url": "https://github.com/microsoft/onnxruntime/releases/download/v1.19.2/onnxruntime-osx-universal2-1.19.2.tgz",
+            "filename": "onnxruntime-osx-universal2-1.19.2.tgz",
+            "extract": lambda file: _extract_tar(file, ORT_DIR),
+        }
+    },
+    "Android": {
+        "url": "https://repo1.maven.org/maven2/com/microsoft/onnxruntime/onnxruntime-android/1.19.2/onnxruntime-android-1.19.2.aar",
+        "filename": "onnxruntime-android-1.19.2.aar",
+        "extract": lambda file: _extract_aar(file),
+    }
+}
 
-def clone_repo(repo_url, repo_dir):
-    if not os.path.exists(repo_dir):
-        subprocess.run(["git", "clone", repo_url], check=True)
-    else:
-        print(f"{repo_dir} already exists. Skipping clone")
+def _extract_zip(file, target_dir):
+    with zipfile.ZipFile(file, 'r') as z:
+        for member in z.namelist():
+            if 'include' in member:
+                member_path = os.path.join(target_dir, 'include', os.path.relpath(member, 'onnxruntime-win-x64-1.19.2/include'))
+            elif 'lib' in member:
+                member_path = os.path.join(target_dir, 'lib', os.path.relpath(member, 'onnxruntime-win-x64-1.19.2/lib'))
+            else:
+                continue
 
+            if member.endswith('/'):
+                os.makedirs(member_path, exist_ok=True)
+            else:
+                os.makedirs(os.path.dirname(member_path), exist_ok=True)
+                with z.open(member) as source, open(member_path, 'wb') as target:
+                    shutil.copyfileobj(source, target)
 
-def check_cuda():
+def _extract_tar(file, target_dir):
+    with tarfile.open(file, 'r:*') as tar:
+        for member in tar.getmembers():
+            if 'include' in member.name:
+                member_path = os.path.join(target_dir, 'include', os.path.relpath(member.name, 'onnxruntime-linux-x64-1.19.2/include'))
+            elif 'lib' in member.name:
+                member_path = os.path.join(target_dir, 'lib', os.path.relpath(member.name, 'onnxruntime-linux-x64-1.19.2/lib'))
+            else:
+                continue
+
+            if member.isdir():
+                os.makedirs(member_path, exist_ok=True)
+            else:
+                os.makedirs(os.path.dirname(member_path), exist_ok=True)
+                with tar.extractfile(member) as source, open(member_path, 'wb') as target:
+                    shutil.copyfileobj(source, target)
+
+def _extract_aar(file):
+    with zipfile.ZipFile(file, 'r') as z:
+        for member in z.namelist():
+            if 'include' in member:
+                member_path = os.path.join(ORT_DIR, 'include', os.path.relpath(member, 'onnxruntime-android-1.19.2.aar/include'))
+            elif 'lib' in member:
+                member_path = os.path.join(ORT_DIR, 'lib', os.path.relpath(member, 'onnxruntime-android-1.19.2.aar/lib'))
+            else:
+                continue
+
+            if member.endswith('/'):
+                os.makedirs(member_path, exist_ok=True)
+            else:
+                os.makedirs(os.path.dirname(member_path), exist_ok=True)
+                with z.open(member) as source, open(member_path, 'wb') as target:
+                    shutil.copyfileobj(source, target)
+
+def run_command(command, cwd=None, check=True):
     try:
-        result = subprocess.run(["nvcc", "--version"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        return result.returncode == 0
+        print(f"Running command in directory {cwd}: {' '.join(command)}")
+        subprocess.run(command, cwd=cwd, check=check)
+    except subprocess.CalledProcessError as e:
+        print(f"Command failed with error: {e}")
+        raise
+
+def download_and_extract(url, filename, extract_func):
+    try:
+        print(f"Downloading {url}...")
+        urllib.request.urlretrieve(url, filename)
+        print(f"Extracting {filename}...")
+        extract_func(filename)
     except Exception as e:
-        print(str(e))
+        print(f"Failed to download or extract {filename}: {e}")
+        raise
+
+def clone_repo():
+    if not os.path.exists(REPO_DIR):
+        run_command(["git", "clone", REPO_URL])
+    else:
+        print(f"Repository already exists at {REPO_DIR}")
+
+def check_gpu_windows():
+    try:
+        # This command checks if DirectML is available, indicating GPU support.
+        result = subprocess.run(["python", "-c", "import win32api; print(win32api.GetVersion())"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return result.returncode == 0
+    except FileNotFoundError:
+        print("DirectML not found. GPU support may not be enabled.")
+        return False
+    except Exception as e:
+        print(f"Error checking GPU on Windows: {e}")
         return False
 
+def check_gpu_linux():
+    try:
+        # This command checks for CUDA installation, indicating GPU support.
+        result = subprocess.run(["nvcc", "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return result.returncode == 0
+    except FileNotFoundError:
+        print("CUDA not found. GPU support may not be enabled.")
+        return False
+    except Exception as e:
+        print(f"Error checking GPU on Linux: {e}")
+        return False
 
-def get_cuda_paths():
-    cuda_home = os.environ.get("CUDA_HOME", "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.4")
-    cudnn_home = os.environ.get("CUDNN_HOME", "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.4")
-    if not os.path.exists(cuda_home):
-        raise FileNotFoundError(f"CUDA home directory {cuda_home} does not exist")
-    if not os.path.exists(cudnn_home):
-        raise FileNotFoundError(f"cuDNN home directory {cudnn_home} does not exist")
-    return cuda_home, cudnn_home
+def download_onnxruntime_binaries():
+    current_os = platform.system()
+    if current_os not in ONNX_RUNTIME_VERSIONS:
+        raise NotImplementedError(f"Unsupported OS: {current_os}")
 
+    ort_dir_exists = os.path.exists(ORT_DIR)
+    if not ort_dir_exists:
+        os.makedirs(ORT_DIR, exist_ok=True)
 
+    gpu_supported = False
+    if current_os == "Windows":
+        gpu_supported = check_gpu_windows()
+    elif current_os == "Linux":
+        gpu_supported = check_gpu_linux()
 
-def build_onnxruntime_windows(repo_dir, use_cuda=False):
-    os.chdir(repo_dir)
-    build_command = ["build.bat", "--build_shared_lib", "--skip_tests", "--parallel", "--config", "Release"]
-    if use_cuda:
-        cuda_home, cudnn_home = get_cuda_paths()
-        print(f"Using CUDA home: {cuda_home}")
-        print(f"Using cuDNN home: {cudnn_home}")
-        build_command.extend(["--use_cuda", f"--cuda_home={cuda_home}", f"--cudnn_home={cudnn_home}"])
-    subprocess.run(build_command, check=True)
+    if gpu_supported:
+        version = "gpu"
+    else:
+        version = "cpu"
 
+    config = ONNX_RUNTIME_VERSIONS[current_os].get(version, ONNX_RUNTIME_VERSIONS[current_os]['cpu'])
+    download_and_extract(config["url"], config["filename"], config["extract"])
 
-def build_onnxruntime_unix(repo_dir, use_cuda=False):
-    os.chdir(repo_dir)
-    build_command = ["build.sh", "--build_shared_lib", "--skip_tests", "--parallel", "--config", "Release"]
-    if use_cuda:
-        cuda_home, cudnn_home = get_cuda_paths()
-        build_command.extend(["--use_cuda", f"--cuda_home={cuda_home}", f"--cudnn_home={cudnn_home}"])
-    subprocess.run(build_command, check=True)
+def build_generate_api():
+    try:
+        print("Building generate() API...")
+        build_command = ["python", "build.py", "--config", "Release"]
 
+        if platform.system() == "Linux" and check_gpu_linux():
+            build_command += ["--use_cuda"]
+        elif platform.system() == "Windows" and check_gpu_windows():
+            build_command += ["--use_dml"]
 
-def copy_built_onnxruntime_windows(src_dir, dst_dir):
-    os.chdir("..")
-    include_src = os.path.join(src_dir, "include", "onnxruntime", "core", "session")
-    lib_src = os.path.join(src_dir, "build", "Windows", "Release")
-    if not os.path.exists(dst_dir):
-        os.makedirs(dst_dir)
-    include_dst = os.path.join(dst_dir, "include")
-    lib_dst = os.path.join(dst_dir, "lib")
-    if not os.path.exists(include_dst):
-        os.makedirs(include_dst)
-    if not os.path.exists(lib_dst):
-        os.makedirs(lib_dst)
-    shutil.copytree(include_src, os.path.join(include_dst, "onnxruntime"), dirs_exist_ok=True)
-    for file in os.listdir(lib_src):
-        if file.startswith("onnxruntime") and file.endswith(".dll"):
-            shutil.copy2(os.path.join(lib_src, file), lib_dst)
-        elif file.startswith("onnxruntime") and file.endswith(".lib"):
-            shutil.copy2(os.path.join(lib_src, file), lib_dst)
+        print(f"Running build command: {' '.join(build_command)}")
+        run_command(build_command, cwd=REPO_DIR)
 
+    except Exception as e:
+        if os.path.exists(os.path.join(REPO_DIR, "build", "Windows", "Release", "wheel", "setup.py")):
+            build_wheel()
+        else:
+            print(f"Failed to build wheel: {str(e)}")
+            raise
 
-def copy_built_onnxruntime_unix(src_dir, dst_dir):
-    os.chdir("..")
-    include_src = os.path.join(src_dir, "include", "onnxruntime", "core", "session")
-    lib_src = os.path.join(src_dir, "build", "Linux", "Release") if platform.system() == "Linux" else os.path.join(src_dir, "build", "MacOS", "Release")
-    if not os.path.exists(dst_dir):
-        os.makedirs(dst_dir)
-    include_dst = os.path.join(dst_dir, "include")
-    lib_dst = os.path.join(dst_dir, "lib")
-    if not os.path.exists(include_dst):
-        os.makedirs(include_dst)
-    if not os.path.exists(lib_dst):
-        os.makedirs(lib_dst)
-    shutil.copytree(include_src, os.path.join(include_dst, "onnxruntime"), dirs_exist_ok=True)
-    for file in os.listdir(lib_src):
-        if file.startswith("libonnxruntime") and file.endswith(".so") or file.endswith(".dylib"):
-            shutil.copy2(os.path.join(lib_src, file), lib_dst)
+def build_wheel():
+    try:
+        print("Building wheel from setup.py...")
+        build_command = ["python", "setup.py", "bdist_wheel"]
+        print(f"Running build command: {' '.join(build_command)}")
+        run_command(build_command, cwd=SETUP_PY_DIR)
+
+    except Exception as e:
+        print(f"Build failed: {e}")
+        raise
 
 
-def build_onnxruntime_genai(repo_dir, ort_home=None):
-    os.chdir(repo_dir)
-    build_command = ["python", "build.py"] if platform.system() == "Windows" else ["python3", "build.py"]
-    subprocess.run(build_command, check=True)
+def install_library():
+    try:
+        print("Installing library...")
+        current_os = platform.system()
 
-def install_wheel(repo_dir):
-    wheel_dir = os.path.join(repo_dir, "build", "wheel")
-    if not os.path.exists(wheel_dir):
-        raise FileNotFoundError(f"Wheel directory {wheel_dir} does not exist.")
-    wheel_files = [f for f in os.listdir(wheel_dir) if f.endswith(".whl")]
-    if not wheel_files:
-        raise FileNotFoundError(f"No wheel files in {wheel_dir}")
-    wheel_path = os.path.join(wheel_dir, wheel_files[0])
-    install_command = [sys.executable,"-m", "pip", "install", wheel_path] if platform.system() == "Windows" else ["python3", "-m", "pip", "install", wheel_path]
-    subprocess.run(install_command, check=True)
+        if not os.path.exists(DIST_DIR):
+            raise FileNotFoundError(
+                f"{DIST_DIR} directory does not exist. Ensure that the wheel was built successfully.")
 
+        # Find the wheel file in DIST_DIR
+        wheel_files = [f for f in os.listdir(DIST_DIR) if f.endswith('.whl')]
+        if not wheel_files:
+            raise FileNotFoundError("No wheel files found in the dist directory.")
+
+        if current_os == "Windows":
+            run_command(["pip", "install", wheel_files[0]], cwd=DIST_DIR)
+        elif current_os in ["Linux", "MacOS"]:
+            run_command(["pip3", "install", wheel_files[0]], cwd=DIST_DIR)
+        else:
+            raise NotImplementedError(f"Unsupported OS: {current_os}")
+
+    except Exception as e:
+        print(f"Installation failed: {e}")
+        raise
 
 
 def main():
-    # clone onnxruntime_genai repo
-    clone_repo(onnxruntime_genai_repo, onnxruntime_genai_dir)
-    # clone onnxruntime repo
-    clone_repo(onnxruntime_repo, onnxruntime_dir)
-    # check for cuda
-    use_cuda = check_cuda()
-    # build onnxruntime
-    if platform.system() == "Windows":
-        build_onnxruntime_windows(onnxruntime_dir, use_cuda)
-    else:
-        build_onnxruntime_unix(onnxruntime_dir, use_cuda)
-    # copy the build files
-    if platform.system() == "Windows":
-        copy_built_onnxruntime_windows(onnxruntime_dir, ort_dir)
-    else:
-        copy_built_onnxruntime_unix(onnxruntime_dir, ort_dir)
-    # build onnxruntime-genai
-    build_onnxruntime_genai(onnxruntime_genai_dir, ort_home=ort_dir)
-    # install the wheel
-    install_wheel(onnxruntime_genai_dir)
-
-
-
+    if not os.path.exists(REPO_DIR):
+        clone_repo()
+    if not os.path.exists(ORT_DIR):
+        download_onnxruntime_binaries()
+    if not os.path.exists(DIST_DIR):
+        build_generate_api()
+    install_library()
 
 if __name__ == "__main__":
     main()
