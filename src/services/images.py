@@ -6,7 +6,6 @@ from src.utilities.inference import vision_and_text_inference
 async def vision_for_images(prompt, image=None):
     """
     Processes images and prompt to perform vision inference.
-
     Args:
         prompt (str): The text prompt for the model.
         image (UploadFile): Image being passed to the model.

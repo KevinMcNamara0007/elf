@@ -1,6 +1,7 @@
-from src.utilities.general import download_vision_model, build_onnx_runtime_genai
+from src.utilities.genai_builder import build_onnxruntime_genai
+from src.utilities.general import download_vision_model
 print("Checking onnxruntime-genai install...")
-build_onnx_runtime_genai()
+build_onnxruntime_genai()
 print("Ensuring onnx model is available...")
 download_vision_model()
 import uvicorn
