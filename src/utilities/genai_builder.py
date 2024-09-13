@@ -362,18 +362,21 @@ def build_onnxruntime_genai():
             if check_gpu_linux():
                 try:
                     run_command([sys.executable, "-m", "pip", "install", "onnxruntime-genai-cuda"])
+                    run_command([sys.executable, "-m", "pip", "install", "onnxruntime-gpu"])
                     print("Successfully installed onnxruntime-genai-cuda.")
                     return
                 except Exception as e:
                     try:
                         run_command([sys.executable, "-m", "pip", "install", "onnxruntime-genai"])
+                        run_command([sys.executable, "-m", "pip", "install", "onnxruntime"])
                         print("Successfully installed onnxruntime-genai.")
                         return
                     except Exception as e:
                         print(f"Pip installation failed: {e}")
             else:
                 try:
-                    run_command([sys.executable, "-m", "pip", "install", "onnxruntime-genai"])
+                    run_command([sys.executable, "-m", "pip", "install", "--pre", "onnxruntime-genai"])
+                    run_command([sys.executable, "-m", "pip", "install", "onnxruntime"])
                     print("Successfully installed onnxruntime-genai.")
                     return
                 except Exception as e:
