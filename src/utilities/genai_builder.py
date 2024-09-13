@@ -9,11 +9,15 @@ import tarfile
 
 # Define constants
 PLATFORM = platform.system() if platform.system() != 'Darwin' else "MacOS"
-REPO_URL = "https://github.com/microsoft/onnxruntime-genai"
+REPO_URL = "https://github.com/microsoft/onnxruntime-genai.git"
 REPO_DIR = "onnxruntime-genai"
+ORT_REPO_URL = "https://github.com/Microsoft/onnxruntime.git"
+ORT_REPO_DIR = "onnxruntime"
 ORT_DIR = os.path.join(REPO_DIR, "ort")
 SETUP_PY_DIR = os.path.join(REPO_DIR, "build", PLATFORM, "Release", "wheel")
 DIST_DIR = os.path.join(SETUP_PY_DIR, "dist")
+BUILD_DIR = os.path.join(ORT_REPO_DIR, "build", PLATFORM, "Release", "onnxruntime")
+
 
 # Supported packages of onnxruntime-genai
 ONNX_RUNTIME_VERSIONS = {
@@ -144,7 +148,7 @@ def clone_repo(repo_url=REPO_URL, repo_dir=REPO_DIR):
     :return:
     """
     if not os.path.exists(repo_dir):
-        run_command(["git", "clone", repo_url, repo_dir])
+        run_command(["git", "clone", "--recursive", repo_url, repo_dir])
     else:
         print(f"Repository already exists at {repo_dir}")
 
@@ -229,7 +233,7 @@ def build_generate_api():
         run_command(build_command, cwd=REPO_DIR)
 
     except Exception as e:
-        if os.path.exists(os.path.join(REPO_DIR, "build", "Windows", "Release", "wheel", "setup.py")):
+        if os.path.exists(os.path.join(REPO_DIR, "build", PLATFORM, "Release", "wheel", "setup.py")):
             build_wheel()
         else:
             print(f"Failed to build wheel: {str(e)}")
@@ -280,11 +284,6 @@ def install_library():
             run_command(["pip3", "install", wheel_files[0]], cwd=SETUP_PY_DIR)
         else:
             raise NotImplementedError(f"Unsupported OS: {PLATFORM}")
-
-        # Uninstall and reinstall onnxruntime for consistency
-        run_command([("pip" if PLATFORM == "Windows" else "pip3"), "uninstall", "onnxruntime", "-y"])
-        run_command([("pip" if PLATFORM == "Windows" else "pip3"), "install", "onnxruntime", "--no-cache-dir"])
-
     except Exception as e:
         print(f"Installation failed: {e}")
         raise
@@ -303,12 +302,64 @@ def check_package(package_name):
         return False
 
 
+def set_environment_variables():
+    """
+    Set necessary environment variables for locating shared libraries.
+    :return:
+    """
+    ort_lib_dir = os.path.join(ORT_DIR, "lib")
+    if PLATFORM == "MacOS":
+        os.environ["DYLD_LIBRARY_PATH"] = f"{ort_lib_dir}:{os.environ.get('DYLD_LIBRARY_PATH', '')}"
+    elif PLATFORM == "Linux":
+        os.environ["LD_LIBRARY_PATH"] = f"{ort_lib_dir}:{os.environ.get('LD_LIBRARY_PATH', '')}"
+    elif PLATFORM == "Windows":
+        os.environ["PATH"] = f"{ort_lib_dir}:{os.environ.get('PATH', '')}"
+    print(f"Environment variables set for {PLATFORM}.")
+
+
+def build_onnxruntime():
+    """
+    Clone and build onnxruntime from source
+    :return:
+    """
+    if not os.path.exists(ORT_REPO_DIR):
+        run_command(["git", "clone", ORT_REPO_URL, ORT_REPO_DIR])
+
+    if PLATFORM == "Windows":
+        run_command(["python", "-m", "pip", "install", "cmake"])
+        run_command(["which", "cmake"])
+        run_command([".\\build.bat", "--config", "RelWithDebInfo", "--build_shared_lib", "--parallel", "--compile_no_warning_as_error", "--skip-tests"], cwd=ORT_REPO_DIR)
+    if PLATFORM in ["Linux", "MacOS"]:
+        run_command(["./build.sh", "--config", "RelWithDebInfo", "--build_shared_lib", "--parallel", "--compile_no_warning_as_error", "--skip_tests"], cwd=ORT_REPO_DIR)
+
+
+def copy_built_files():
+    """
+    Copy built onnxruntime files from the build directory to the ort directory.
+    :return:
+    """
+    if not os.path.exists(BUILD_DIR):
+        raise FileNotFoundError(f"{BUILD_DIR} does not exist. Ensure that onnxruntime is built successfully.")
+
+    os.makedirs(ORT_DIR, exist_ok=True)
+
+    # Copy include and lib directories
+    for folder in ["include", "lib"]:
+        src_dir = os.path.join(BUILD_DIR, folder)
+        dest_dir = os.path.join(ORT_DIR, folder)
+        if os.path.exists(src_dir):
+            shutil.copytree(src_dir, dest_dir, dirs_exist_ok=True)
+        else:
+            print(f"{src_dir} does not exist. Skipping...")
+
+
 def build_onnxruntime_genai():
     if not check_package("onnxruntime-genai"):
+        set_environment_variables()
+        build_onnxruntime()
+        copy_built_files()
         if not os.path.exists(REPO_DIR):
             clone_repo()
-        if not os.path.exists(ORT_DIR):
-            download_onnxruntime_binaries()
         wheel_files = [f for f in os.listdir(DIST_DIR if PLATFORM == "Windows" else SETUP_PY_DIR) if f.endswith('.whl')]
         if not wheel_files:
             build_generate_api()
