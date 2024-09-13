@@ -3,9 +3,12 @@ import os
 import subprocess
 import shutil
 import platform
+import sys
 import urllib.request
 import zipfile
 import tarfile
+
+from sympy.codegen.ast import continue_, break_
 
 # Define constants
 PLATFORM = platform.system() if platform.system() != 'Darwin' else "MacOS"
@@ -160,7 +163,7 @@ def check_gpu_windows():
     """
     try:
         # This command checks if DirectML is available, indicating GPU support.
-        result = subprocess.run(["python", "-c", "import win32api; print(win32api.GetVersion())"],
+        result = subprocess.run([sys.executable, "-c", "import win32api; print(win32api.GetVersion())"],
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         return result.returncode == 0
     except FileNotFoundError:
@@ -223,7 +226,7 @@ def build_generate_api():
     """
     try:
         print("Building generate() API...")
-        build_command = ["python" if platform.system() == "Windows" else "python3", "build.py", "--config", "Release"]
+        build_command = [sys.executable, "build.py", "--config", "Release"]
         if platform.system() == "Linux" and check_gpu_linux():
             build_command += ["--use_cuda"]
         elif platform.system() == "Windows" and check_gpu_windows():
@@ -247,7 +250,7 @@ def build_wheel():
     """
     try:
         print("Building wheel from setup.py...")
-        build_command = ["python" if PLATFORM == "Windows" else "python3", "setup.py", "bdist_wheel"]
+        build_command = [sys.executable, "setup.py", "bdist_wheel"]
         print(f"Running build command: {' '.join(build_command)}")
         run_command(build_command, cwd=SETUP_PY_DIR)
 
@@ -354,7 +357,27 @@ def copy_built_files():
 
 
 def build_onnxruntime_genai():
-    if not check_package("onnxruntime-genai"):
+    if not check_package("onnxruntime-genai") and not check_package("onnxruntime-genai-cuda"):
+        if PLATFORM != "MacOS":
+            if check_gpu_linux():
+                try:
+                    run_command([sys.executable, "-m", "pip", "install", "onnxruntime-genai-cuda"])
+                    print("Successfully installed onnxruntime-genai-cuda.")
+                    return
+                except Exception as e:
+                    try:
+                        run_command([sys.executable, "-m", "pip", "install", "onnxruntime-genai"])
+                        print("Successfully installed onnxruntime-genai.")
+                        return
+                    except Exception as e:
+                        print(f"Pip installation failed: {e}")
+            else:
+                try:
+                    run_command([sys.executable, "-m", "pip", "install", "onnxruntime-genai"])
+                    print("Successfully installed onnxruntime-genai.")
+                    return
+                except Exception as e:
+                    print(f"Pip installation failed: {e}")
         set_environment_variables()
         build_onnxruntime()
         copy_built_files()

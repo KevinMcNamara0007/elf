@@ -1,7 +1,7 @@
 import onnxruntime_genai as og
 from fastapi import HTTPException
 
-from src.utilities.general import onnx_model_dir
+from src.utilities.general import revised_onnx_model_dir, CONTEXT_WINDOW
 
 
 def vision_and_text_inference(prompt, image):
@@ -12,7 +12,7 @@ def vision_and_text_inference(prompt, image):
         # Set model parameters
         params = og.GeneratorParams(vision_model)
         params.set_inputs(inputs)
-        params.set_search_options(max_length=65000)
+        params.set_search_options(max_length=CONTEXT_WINDOW)
 
         # Initialize the generator
         generator = og.Generator(vision_model, params)
@@ -38,7 +38,7 @@ def text_inference(prompt):
         inputs = vision_processor(prompt, images=None)
         params = og.GeneratorParams(vision_model)
         params.set_inputs(inputs)
-        params.set_search_options(max_length=128000)
+        params.set_search_options(max_length=CONTEXT_WINDOW)
 
         generator = og.Generator(vision_model, params)
 
@@ -56,6 +56,6 @@ def text_inference(prompt):
 
 
 # Initialize model, processor, and tokenizer
-vision_model = og.Model(onnx_model_dir)
+vision_model = og.Model(revised_onnx_model_dir)
 vision_processor = vision_model.create_multimodal_processor()
 vision_tokenizer = vision_processor.create_stream()

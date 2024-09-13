@@ -9,6 +9,8 @@ load_dotenv(os.getenv("ENV", "config/.env-dev"))
 BASE_MODEL_DIR = os.getenv("BASE_MODEL_DIR", "/opt/models")
 VISION_MODEL_DIR = os.getenv("VISION_MODEL_DIR")
 onnx_model_dir = os.path.join(BASE_MODEL_DIR, VISION_MODEL_DIR)
+revised_onnx_model_dir = "efs/models/microsoft/Phi-3-vision-128k-instruct-onnx-cpu/cuda-int4-rtn-block-32"
+CONTEXT_WINDOW = int(os.getenv("CONTEXT_WINDOW", "131072"))
 
 
 def download_vision_model():
@@ -30,7 +32,7 @@ def download_vision_model():
 
     # Download the repository
     partial_dir = '/'.join(onnx_model_dir.split("/")[:-1])
-    if not os.path.exists(onnx_model_dir):
+    if not os.path.exists(revised_onnx_model_dir):
         os.makedirs(partial_dir, exist_ok=True)
         print(f"Downloading the repository {VISION_MODEL_DIR} to {partial_dir}...")
         try:
@@ -40,7 +42,7 @@ def download_vision_model():
             return
 
     # Check for missing files
-    downloaded_files = os.listdir(onnx_model_dir)
+    downloaded_files = os.listdir(revised_onnx_model_dir)
     missing_files = [f for f in expected_files if f not in downloaded_files]
 
     if missing_files:

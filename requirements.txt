@@ -10,6 +10,6 @@ tqdm~=4.66.4
 aiohttp~=3.9.5
 pydantic~=2.8.2
 psutil~=6.0.0
-onnx~=1.16.1
 transformers==4.40.2
 huggingface-hub
+pillow
