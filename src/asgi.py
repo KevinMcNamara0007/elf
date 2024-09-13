@@ -53,4 +53,4 @@ async def docs_redirect():
 
 
 if __name__ == "__main__":
-    uvicorn.run(elf, host="127.0.0.1", port=int(8000))
+    uvicorn.run(elf, host="0.0.0.0", port=int(8000))
