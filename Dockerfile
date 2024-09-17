@@ -1,5 +1,5 @@
 # Use the NVIDIA CUDA base image with CUDA 12.6
-FROM nvidia/cuda:12.6.0-devel-ubuntu22.04
+FROM nvidia/cuda:12.6.0-devel-ubuntu22.04 AS base
 
 # Install necessary packages
 RUN apt-get update && \
@@ -13,35 +13,51 @@ RUN apt-get update && \
     software-properties-common \
     gnupg \
     python3 \
-    python3-pip
+    python3-pip \
+    qemu-user-static
 
-# Download and install the cuDNN 9.4.0 package
-RUN wget https://developer.download.nvidia.com/compute/cudnn/9.4.0/local_installers/cudnn-local-repo-ubuntu2204-9.4.0_1.0-1_amd64.deb \
-    && dpkg -i cudnn-local-repo-ubuntu2204-9.4.0_1.0-1_amd64.deb
+# Download and install cuDNN
+RUN wget https://developer.download.nvidia.com/compute/cudnn/9.4.0/local_installers/cudnn-local-repo-ubuntu2204-9.4.0_1.0-1_amd64.deb && \
+    dpkg -i cudnn-local-repo-ubuntu2204-9.4.0_1.0-1_amd64.deb && \
+    cp /var/cudnn-local-repo-ubuntu2204-9.4.0/cudnn-*-keyring.gpg /usr/share/keyrings/ && \
+    apt-get update && \
+    apt-get install -y cudnn-cuda-12 && \
+    rm cudnn-local-repo-ubuntu2204-9.4.0_1.0-1_amd64.deb && \
+    rm -rf /var/lib/apt/lists/*
 
-# Copy the keyring to the correct location
-RUN cp /var/cudnn-local-repo-ubuntu2204-9.4.0/cudnn-*-keyring.gpg /usr/share/keyrings/
+# Copy the entrypoint script
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
-# Update and install cuDNN for CUDA 12
-RUN apt-get update && \
-    apt-get install -y cudnn-cuda-12
+# Copy the EFS folder where the models are stored
+COPY efs /efs
 
-# Set the library path
-ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+# Install Python dependencies
+COPY requirements.txt /app/requirements.txt
+RUN pip install --upgrade pip && \
+    pip install -r /app/requirements.txt && \
+    rm -rf /root/.cache/pip
 
-# Verify installation
-RUN echo "Checking CUDA version" && nvcc --version
-RUN echo "Checking cuDNN installation" && dpkg -l | grep cudnn
+# Install onnxruntime-genai based on GPU availability
+RUN if nvcc --version > /dev/null 2>&1; then \
+        echo "GPU detected, installing onnxruntime-genai-cuda and onnxruntime-gpu" && \
+        pip install onnxruntime-genai-cuda==0.4.0 onnxruntime-gpu==1.19.2; \
+    else \
+        echo "No GPU detected, installing CPU version of onnxruntime-genai" && \
+        pip install onnxruntime-genai onnxruntime; \
+    fi
 
 # Set the working directory
 WORKDIR /app
 
+# Copy the rest of the application code
 COPY . .
 
-RUN pip install -r requirements.txt
+# Expose necessary ports
+EXPOSE 8000
 
-# Expose the necessary port (if applicable)
-EXPOSE 8000-8010
+# Set the entry point to the script
+ENTRYPOINT ["/entrypoint.sh"]
 
-# Set the entry point (if needed)
+# Default command
 CMD ["uvicorn", "src.asgi:elf", "--host=0.0.0.0", "--port=8000"]

@@ -4,7 +4,6 @@ from PIL import Image
 import numpy as np
 from fastapi import UploadFile, HTTPException
 import onnxruntime_genai as og
-
 from src.utilities.inference import vision_and_text_inference
 
 # List of supported image formats for Phi-3 vision model

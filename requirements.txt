@@ -13,5 +13,6 @@ psutil~=6.0.0
 transformers==4.40.2
 huggingface-hub
 pillow
-onnxruntime-gpu==1.19.2
-onnxruntime-genai-cuda==0.4.0
+pymupdf
+python-docx
+openpyxl

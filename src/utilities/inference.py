@@ -1,15 +1,21 @@
 import onnxruntime_genai as og
 from fastapi import HTTPException
+from src.utilities.general import CONTEXT_WINDOW, extract_text_from_pdf, extract_text_from_docx, \
+    extract_text_from_excel, extract_text_from_txt, VISION_MODEL_DIR
 
-from src.utilities.general import revised_onnx_model_dir, CONTEXT_WINDOW
 
-
-def vision_and_text_inference(prompt, image):
+def run_inference(prompt, image=None):
+    """
+    Helper function to run inference for both vision-and-text and text-only.
+    :param prompt: The input prompt for inference
+    :param image: Optional image for vision-and-text inference
+    :return: The generated response
+    """
     try:
-        # Prepare inputs for the model
+        # Prepare model inputs
         inputs = vision_processor(prompt, images=image)
 
-        # Set model parameters
+        # Set up model generator parameters
         params = og.GeneratorParams(vision_model)
         params.set_inputs(inputs)
         params.set_search_options(max_length=CONTEXT_WINDOW)
@@ -17,45 +23,73 @@ def vision_and_text_inference(prompt, image):
         # Initialize the generator
         generator = og.Generator(vision_model, params)
 
-        # Generate the response
-        vision_model_response = ""
+        # Generate response tokens
+        response = ""
         while not generator.is_done():
             generator.compute_logits()
             generator.generate_next_token()
             new_token = generator.get_next_tokens()[0]
-            vision_model_response += vision_tokenizer.decode(new_token)
+            response += vision_tokenizer.decode(new_token)
 
+        # Clean up the generator to free resources
         del generator
-        return vision_model_response
+        return response
 
     except Exception as e:
-        print("Error during vision inference:", e)
-        raise HTTPException(status_code=500, detail="An error occurred during vision inference.")
+        print(f"Error during inference: {e}")
+        raise HTTPException(status_code=500, detail="An error occurred during inference.")
+
+
+def vision_and_text_inference(prompt, image):
+    """
+    Function to perform vision-and-text inference.
+    :param prompt: The input prompt for inference
+    :param image: Image input for the vision model
+    :return: The generated response
+    """
+    return run_inference(prompt, image=image)
 
 
 def text_inference(prompt):
+    """
+    Function to perform text-only inference.
+    :param prompt: The input prompt for inference
+    :return: The generated response
+    """
+    return run_inference(prompt)
+
+
+async def doc_extractor(file):
+    """
+    Extract text from various file formats (PDF, DOCX, XLSX, TXT).
+    :param file: The uploaded file object
+    :return: Extracted text content in dictionary format
+    """
+    file_type = file.content_type
+    text_content = ""
+
     try:
-        inputs = vision_processor(prompt, images=None)
-        params = og.GeneratorParams(vision_model)
-        params.set_inputs(inputs)
-        params.set_search_options(max_length=CONTEXT_WINDOW)
-
-        generator = og.Generator(vision_model, params)
-
-        vision_model_response = ""
-        while not generator.is_done():
-            generator.compute_logits()
-            generator.generate_next_token()
-            new_token = generator.get_next_tokens()[0]
-            vision_model_response += vision_tokenizer.decode(new_token)
-        del generator
-        return vision_model_response
+        if file_type == 'application/pdf':
+            text_content = await extract_text_from_pdf(file)
+        elif file_type == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+            text_content = await extract_text_from_docx(file)
+        elif file_type == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
+            text_content = await extract_text_from_excel(file)
+        elif file_type == 'text/plain':
+            text_content = await extract_text_from_txt(file)
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported file type: {file_type}")
     except Exception as e:
-        print("Error during text inference:", str(e))
-        raise HTTPException(status_code=500, detail="An error occurred during text inference.")
+        raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
+
+    return {"contents": text_content}
 
 
-# Initialize model, processor, and tokenizer
-vision_model = og.Model(revised_onnx_model_dir)
-vision_processor = vision_model.create_multimodal_processor()
-vision_tokenizer = vision_processor.create_stream()
+# Initialize model, processor, and tokenizer once at the module level
+try:
+    vision_model = og.Model(VISION_MODEL_DIR)
+    vision_processor = vision_model.create_multimodal_processor()
+    vision_tokenizer = vision_processor.create_stream()
+
+except Exception as e:
+    raise RuntimeError(f"Failed to load model or initialize processor: {e}")

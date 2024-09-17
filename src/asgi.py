@@ -1,8 +1,5 @@
-from src.utilities.genai_builder import build_onnxruntime_genai
 from src.utilities.general import download_vision_model
-print("Checking onnxruntime-genai install...")
-build_onnxruntime_genai()
-print("Ensuring onnx model is available...")
+print("Ensuring onnx model is available...", flush=True)
 download_vision_model()
 import uvicorn
 from fastapi import FastAPI
