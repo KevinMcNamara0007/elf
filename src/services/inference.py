@@ -1,5 +1,8 @@
+from fastapi import HTTPException
+
 from src.utilities.general import classifications
-from src.utilities.inference import fetch_llama_cpp_response, classify_prompt, fetch_llama_cpp_response_stream, fetch_pro
+from src.utilities.inference import fetch_llama_cpp_response, classify_prompt, fetch_llama_cpp_response_stream, \
+    fetch_pro, call_openai, call_claude
 
 
 async def get_expert_response(rules, messages, temperature=0.05, top_k=40, top_p=.95):
@@ -83,3 +86,20 @@ def prompt_classification(prompt):
     Classifies a given prompt using the cnn classifier.
     """
     return classify_prompt(prompt, text=True)
+
+
+async def route_llm_request(prompt: str, llm_name: str, api_key: str):
+    """
+    Routes the request to the appropriate LLM service based on the llm_name provided by the user.
+
+    :param prompt: The prompt for the LLM.
+    :param llm_name: The name of the LLM service (e.g., "openai", "claude").
+    :param api_key: The API key for the selected LLM service.
+    :return: The response from the selected LLM.
+    """
+    if llm_name.lower() == 'openai':
+        return await call_openai(prompt, api_key)
+    elif llm_name.lower() == 'claude':
+        return await call_claude(prompt, api_key)
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported LLM provider")

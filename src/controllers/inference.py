@@ -3,7 +3,8 @@ from starlette import status
 from starlette.responses import StreamingResponse
 from src.authentication.authentication import verify_token
 from src.modeling.request_models import AskExpertRequest, ClassifyRequest, SemanticSearchRequest, Message, Pro
-from src.services.inference import get_expert_response, prompt_classification, get_expert_response_stream, get_pro_response
+from src.services.inference import get_expert_response, prompt_classification, get_expert_response_stream, \
+    get_pro_response, route_llm_request
 from src.utilities.crud import query_record
 from src.utilities.general import NO_TOKEN
 
@@ -43,7 +44,7 @@ async def ask_an_expert(
     return await get_expert_response(
         rules=request.rules,  # optional the role the LLM should play.
         messages=history,  # optional must be formatted "[{"role": "system", "content": "system prompt"}]"
-        temperature=request.temperature, # optional temperature of the LLM
+        temperature=request.temperature,  # optional temperature of the LLM
         top_k=request.top_k,  # optional Number of words to consider for next token
         top_p=request.top_p,  # optional Percentage to limit next token generation to
     )
@@ -94,7 +95,7 @@ async def ask_a_pro(
     if request.prompt:
         return await get_pro_response(
             prompt=request.prompt,  # optional the role the LLM should play.
-            output_tokens = request.output_tokens
+            output_tokens=request.output_tokens
         )
     else:
         raise HTTPException(status_code=400, detail="Provide a prompt")
@@ -125,6 +126,15 @@ async def semantic_search(
     assert verify_token(token)
     return query_record(
         request.query,  # required prompt to query against
-        request.collection_name,   # required collection to retrieve records from
+        request.collection_name,  # required collection to retrieve records from
         request.max_results  # optional max number of results to return
     )
+
+
+@inference_router.post("/general_llm_caller", status_code=status.HTTP_200_OK, description="Connect to the LLMs.")
+async def general_llm_caller(
+        prompt: str = Body(...),
+        llm_name: str = Body(...),
+        apikey: str = Body(...)
+):
+    return await route_llm_request(prompt, llm_name, apikey)
