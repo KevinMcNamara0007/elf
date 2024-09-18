@@ -8,6 +8,8 @@ import urllib.parse
 from time import sleep
 
 import asyncio
+
+import psutil
 from dotenv import load_dotenv
 import onnxruntime as ort
 import time
@@ -50,6 +52,8 @@ MAX_RETRY_ATTEMPTS = 3
 REQUEST_TIMEOUT = 300
 RESTART_WAIT_TIME = 30
 THREADS_BATCH = max(1, NUMBER_OF_CORES // 4)
+RESTART_COMMAND = None
+LLM_TIMEOUT = 75
 
 
 def extract_port_from_url(url):
@@ -130,6 +134,7 @@ def spin_up_server(number_of_servers):
     """
     Starts up llama-server x (number_of_servers) with pre-configured params
     """
+    global RESTART_COMMAND
     # Automatically adjust GPU layers, batch sizes, and thread settings based on server count
     gpu_layers = GPU_LAYERS if number_of_servers == 1 else str(int(GPU_LAYERS) // number_of_servers)
     batch_size = str(BATCH_SIZE) if number_of_servers == 1 else str(BATCH_SIZE // number_of_servers)
@@ -140,6 +145,7 @@ def spin_up_server(number_of_servers):
     processes_ports = []
     for i in range(number_of_servers):
         PORT = LLAMA_PORT + i
+        kill_process_on_port(PORT)
         # Form the command list dynamically
         command = [
             LLAMA_CPP_PATH,
@@ -153,18 +159,9 @@ def spin_up_server(number_of_servers):
             "--batch-size", batch_size,  # Dynamically adjust batch size
             "--ubatch-size", ubatch_size  # Adjust micro-batch size
         ]
-
+        RESTART_COMMAND = command
         processes_ports.append((subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE), PORT))
     return processes_ports
-
-
-def replace_port_in_url(url, new_port):
-    """
-    Replaces port in a given url with new port
-    """
-    parts = url.split(":")
-    parts[-1] = str(new_port) + "/" + parts[-1].split("/")[-1]  # Replace the second last part (the port)
-    return ":".join(parts)
 
 
 def file_cleanup(filename):
@@ -221,18 +218,59 @@ async def restart_llama_server(port):
     Restart the llama-server running on the specified port and wait for it to be ready.
     :param port: Port on which the llama-server is running.
     """
+    global RESTART_COMMAND
     try:
-        # Kill the existing server process using the port
-        subprocess.run(f"lsof -ti:{port} | xargs kill -9", shell=True, check=False)
+        # rebuild restart command to adjust for potential port change
+        port_index = RESTART_COMMAND.index("--port") + 1
+        command = RESTART_COMMAND[:port_index] + [str(port)] + RESTART_COMMAND[port_index + 1:]
+
+        # Kill any process using the specified port
+        kill_process_on_port(port)
+
         # Wait for a bit to ensure the process is fully stopped
         await asyncio.sleep(5)
-        # Restart the server on the specified port
-        subprocess.Popen(["/path/to/llama-server", "--port", str(port)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        # Restart the server with the provided command
+        subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
         # Wait for the server to start up
         await asyncio.sleep(RESTART_WAIT_TIME)
+
+        print(f"llama-server restarted on port {port}")
+
     except Exception as e:
         print(f"Failed to restart llama-server on port {port}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to restart llama-server: {e}")
+
+
+def kill_process_on_port(port, force_kill=True):
+    """
+    Kill any process using the specified port.
+    :param port: The port to search for active processes.
+    :param force_kill: If True, forcefully kill the process; otherwise, try to terminate first.
+    """
+    try:
+        # Iterate through all network connections
+        for conn in psutil.net_connections():
+            if conn.laddr.port == port:
+                # Get the process associated with this connection's PID
+                process = psutil.Process(conn.pid)
+                print(f"Found process {process.pid} ({process.name()}) using port {port}")
+
+                # Try to terminate the process gracefully
+                process.terminate()
+                time.sleep(10)  # Wait a bit to ensure termination
+
+                # If force_kill is True and process is still running, kill it
+                if force_kill and process.is_running():
+                    process.kill()
+                    print(f"Force killed process {process.pid}")
+                return
+
+        print(f"No process found using port {port}")
+    except Exception as e:
+        print(f"Error killing process on port {port}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error killing process on port {port}: {e}")
 
 
 # Load the tokenizer

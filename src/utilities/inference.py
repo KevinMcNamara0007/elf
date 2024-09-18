@@ -1,12 +1,12 @@
 import asyncio
 import math
-import subprocess
 import httpx
 import numpy as np
 import requests
 from fastapi import HTTPException
 from src.utilities.general import (classifications, tokenizer, classifier,
-                                   NUMBER_OF_SERVERS, CHATML_TEMPLATE, extract_port_from_url, RESTART_WAIT_TIME)
+                                   NUMBER_OF_SERVERS, CHATML_TEMPLATE, extract_port_from_url, RESTART_WAIT_TIME,
+                                   restart_llama_server, LLM_TIMEOUT)
 
 
 def load_model(key):
@@ -117,7 +117,7 @@ async def fetch_llama_cpp_response(rules, messages, temperature, key, top_k=40, 
         CURRENT_BALANCER_SELECTION = (CURRENT_BALANCER_SELECTION + 1) % BALANCER_MAX_OPTION
 
         try:
-            async with httpx.AsyncClient(timeout=300) as client:
+            async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
                 response = await client.post(expert_url, json=payload)
                 response.raise_for_status()
                 return response.json()
@@ -125,14 +125,13 @@ async def fetch_llama_cpp_response(rules, messages, temperature, key, top_k=40, 
             print(f"Network Error: {str(e)}")
 
             # Attempt to restart the server
-            restart_command = f"kill $(lsof -t -i:{port}) && nohup <server_start_command> &"
-            subprocess.run(restart_command, shell=True, check=True)
+            await restart_llama_server(port)
 
             # Wait for the server to restart
             await asyncio.sleep(RESTART_WAIT_TIME)
 
             # Retry the request after restarting
-            async with httpx.AsyncClient(timeout=300) as client:
+            async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
                 response = await client.post(expert_url, json=payload)
                 response.raise_for_status()
                 return response.json()
@@ -181,7 +180,7 @@ async def fetch_pro(prompt, output_tokens, key):
         CURRENT_BALANCER_SELECTION = (CURRENT_BALANCER_SELECTION + 1) % BALANCER_MAX_OPTION
 
         try:
-            async with httpx.AsyncClient(timeout=500) as client:
+            async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
                 response = await client.post(expert_url, json=payload)
                 response.raise_for_status()
                 return response.json()
@@ -189,14 +188,13 @@ async def fetch_pro(prompt, output_tokens, key):
             print(f"Network Error: {str(e)}")
 
             # Attempt to restart the server
-            restart_command = f"kill $(lsof -t -i:{port}) && nohup <server_start_command> &"
-            subprocess.run(restart_command, shell=True, check=True)
+            await restart_llama_server(port)
 
             # Wait for the server to restart
             await asyncio.sleep(RESTART_WAIT_TIME)
 
             # Retry the request after restarting
-            async with httpx.AsyncClient(timeout=500) as client:
+            async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
                 response = await client.post(expert_url, json=payload)
                 response.raise_for_status()
                 return response.json()
@@ -227,7 +225,7 @@ async def fetch_llama_cpp_response_stream(rules, messages, temperature, key, top
         CURRENT_BALANCER_SELECTION = (CURRENT_BALANCER_SELECTION + 1) % BALANCER_MAX_OPTION
 
         try:
-            async with httpx.AsyncClient(timeout=300) as client:
+            async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
                 async with client.stream("POST", expert_url, json=payload) as response:
                     async for chunk in response.aiter_text():
                         yield chunk  # Yield each chunk as it is received
@@ -235,14 +233,13 @@ async def fetch_llama_cpp_response_stream(rules, messages, temperature, key, top
             print(f"Network Error: {str(e)}")
 
             # Attempt to restart the server
-            restart_command = f"kill $(lsof -t -i:{port}) && nohup <server_start_command> &"
-            subprocess.run(restart_command, shell=True, check=True)
+            await restart_llama_server(port)
 
             # Wait for the server to restart
             await asyncio.sleep(RESTART_WAIT_TIME)
 
             # Retry the request after restarting
-            async with httpx.AsyncClient(timeout=300) as client:
+            async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
                 async with client.stream("POST", expert_url, json=payload) as response:
                     async for chunk in response.aiter_text():
                         yield chunk  # Yield each chunk as it is received
@@ -291,7 +288,7 @@ async def call_openai(prompt: str, api_key: str):
     }
 
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=120) as client:
             response = await client.post(openai_url, json=payload, headers=headers)
             response.raise_for_status()
             return response.json()
@@ -321,7 +318,7 @@ async def call_claude(prompt: str, api_key: str):
     }
 
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=120) as client:
             response = await client.post(claude_url, json=payload, headers=headers)
             response.raise_for_status()
             return response.json()
