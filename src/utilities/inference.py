@@ -6,7 +6,7 @@ import requests
 from fastapi import HTTPException
 from src.utilities.general import (classifications, tokenizer, classifier,
                                    NUMBER_OF_SERVERS, CHATML_TEMPLATE, extract_port_from_url, RESTART_WAIT_TIME,
-                                   restart_llama_server, LLM_TIMEOUT)
+                                   restart_llama_server, LLM_TIMEOUT, SERVER_MANAGER)
 
 
 def load_model(key):
@@ -113,29 +113,15 @@ async def fetch_llama_cpp_response(rules, messages, temperature, key, top_k=40, 
         }
 
         expert_url = f"{expert_urls[CURRENT_BALANCER_SELECTION]}/completion"
-        port = extract_port_from_url(expert_url)
-        CURRENT_BALANCER_SELECTION = (CURRENT_BALANCER_SELECTION + 1) % BALANCER_MAX_OPTION
-
-        try:
-            async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
-                response = await client.post(expert_url, json=payload)
-                response.raise_for_status()
-                return response.json()
-        except httpx.RequestError as e:
-            print(f"Network Error: {str(e)}")
-
-            # Attempt to restart the server
-            await restart_llama_server(port)
-
-            # Wait for the server to restart
-            await asyncio.sleep(RESTART_WAIT_TIME)
-
-            # Retry the request after restarting
-            async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
-                response = await client.post(expert_url, json=payload)
-                response.raise_for_status()
-                return response.json()
-
+        async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
+            response = await client.post(expert_url, json=payload)
+            response.raise_for_status()
+            port = extract_port_from_url(expert_url)
+            for server in SERVER_MANAGER.servers:
+                if server.port == port:
+                    SERVER_MANAGER.increment_call_count(server)
+            CURRENT_BALANCER_SELECTION = (CURRENT_BALANCER_SELECTION + 1) % int(BALANCER_MAX_OPTION)
+            return response.json()
     except Exception as exc:
         print(f"Response Error: {str(exc)}")
         raise HTTPException(status_code=500, detail=f"Could not fetch response from llama.cpp: {exc.args}")
@@ -176,29 +162,15 @@ async def fetch_pro(prompt, output_tokens, key):
         }
 
         expert_url = f"{expert_urls[CURRENT_BALANCER_SELECTION]}/completion"
-        port = extract_port_from_url(expert_url)
-        CURRENT_BALANCER_SELECTION = (CURRENT_BALANCER_SELECTION + 1) % BALANCER_MAX_OPTION
-
-        try:
-            async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
-                response = await client.post(expert_url, json=payload)
-                response.raise_for_status()
-                return response.json()
-        except httpx.RequestError as e:
-            print(f"Network Error: {str(e)}")
-
-            # Attempt to restart the server
-            await restart_llama_server(port)
-
-            # Wait for the server to restart
-            await asyncio.sleep(RESTART_WAIT_TIME)
-
-            # Retry the request after restarting
-            async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
-                response = await client.post(expert_url, json=payload)
-                response.raise_for_status()
-                return response.json()
-
+        async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
+            response = await client.post(expert_url, json=payload)
+            response.raise_for_status()
+            port = extract_port_from_url(expert_url)
+            for server in SERVER_MANAGER.servers:
+                if server.port == port:
+                    SERVER_MANAGER.increment_call_count(server)
+            CURRENT_BALANCER_SELECTION = (CURRENT_BALANCER_SELECTION + 1) % int(BALANCER_MAX_OPTION)
+            return response.json()
     except Exception as exc:
         print(f"Response Error: {str(exc)}")
         raise HTTPException(status_code=500, detail=f"Could not fetch response from llama.cpp: {exc.args}")
@@ -213,7 +185,6 @@ async def fetch_llama_cpp_response_stream(rules, messages, temperature, key, top
         payload = {
             "prompt": prompt,
             "stream": True,  # Enable streaming in the request
-            "n_predict": -1,
             "temperature": temperature,
             "stop": STOP_SYMBOLS,
             "top_k": top_k,
@@ -222,28 +193,19 @@ async def fetch_llama_cpp_response_stream(rules, messages, temperature, key, top
 
         expert_url = f"{expert_urls[CURRENT_BALANCER_SELECTION]}/completion"
         port = extract_port_from_url(expert_url)
-        CURRENT_BALANCER_SELECTION = (CURRENT_BALANCER_SELECTION + 1) % BALANCER_MAX_OPTION
+        CURRENT_BALANCER_SELECTION = (CURRENT_BALANCER_SELECTION + 1) % int(BALANCER_MAX_OPTION)
 
-        try:
-            async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
-                async with client.stream("POST", expert_url, json=payload) as response:
-                    async for chunk in response.aiter_text():
-                        yield chunk  # Yield each chunk as it is received
-        except httpx.RequestError as e:
-            print(f"Network Error: {str(e)}")
+        async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
+            response = await client.post(expert_url, json=payload)
+            response.raise_for_status()
 
-            # Attempt to restart the server
-            await restart_llama_server(port)
+            for server in SERVER_MANAGER.servers:
+                if server.port == port:
+                    SERVER_MANAGER.increment_call_count(server)
 
-            # Wait for the server to restart
-            await asyncio.sleep(RESTART_WAIT_TIME)
-
-            # Retry the request after restarting
-            async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
-                async with client.stream("POST", expert_url, json=payload) as response:
-                    async for chunk in response.aiter_text():
-                        yield chunk  # Yield each chunk as it is received
-
+            # Streaming response chunks
+            async for chunk in response.aiter_text():
+                yield chunk
     except Exception as exc:
         print(f"Response Error: {str(exc)}")
         raise HTTPException(status_code=500, detail=f"Could not fetch response from llama.cpp: {exc.args}")

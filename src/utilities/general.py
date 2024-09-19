@@ -8,6 +8,7 @@ import urllib.parse
 from time import sleep
 
 import asyncio
+import threading
 
 import psutil
 from dotenv import load_dotenv
@@ -22,8 +23,6 @@ SPLIT_SYMBOL = os.getenv("SPLIT_SYMBOL")
 general_model_path = os.getenv("general")
 classifier_tokenizer = os.getenv("classifier_tokenizer")
 classifier_model = os.getenv("classifier_model")
-CONTEXT_WINDOW = os.getenv("CONTEXT_WINDOW")
-INPUT_WINDOW = int(os.getenv("INPUT_WINDOW"))
 HOST = os.getenv("HOST", "127.0.0.1")
 UVICORN_PORT = os.getenv("UVICORN_PORT", "8000")
 LLAMA_CPP_HOME = os.getenv("LLAMA_CPP_HOME", "/opt/cx_intelligence/aiaas/compiled_llama_cpp")
@@ -31,29 +30,28 @@ LLAMA_SOURCE_FOLDER = os.path.join(os.getcwd(), os.getenv("LLAMA_SOURCE_FOLDER")
 LLAMA_PORT = int(UVICORN_PORT) + 1
 LLAMA_CPP_ENDPOINT = f"http://{HOST}:{LLAMA_PORT}/completion"
 GENERAL_MODEL_PATH = os.path.join(os.getcwd(), general_model_path)
+NUMBER_OF_SERVERS = os.getenv("NUMBER_OF_SERVERS", "1")
 NUMBER_OF_CORES = multiprocessing.cpu_count()
-WORKERS = f"-j {NUMBER_OF_CORES - 2}" if NUMBER_OF_CORES > 2 else ""
 PLATFORM = platform.system()
-GPU_LAYERS = os.getenv("GPU_LAYERS")
-NUMBER_OF_SERVERS = int(os.getenv("NUMBER_OF_SERVERS"))
-BATCH_SIZE = int(os.getenv("BATCH_SIZE"))
-UBATCH_SIZE = int(os.getenv("UBATCH_SIZE"))
+GPU_LAYERS = int(os.getenv("GPU_LAYERS"))
+TOTAL_BATCH_SIZE = int(os.getenv("BATCH_SIZE"))
+TOTAL_UBATCH_SIZE = int(os.getenv("UBATCH_SIZE"))
 API_TOKENS = os.getenv("API_TOKENS")
 NO_TOKEN = "No Token was provided."
 API_TOKENS = API_TOKENS.split(",")
 LLAMA_CPP_ENDPOINTS = []
 LLAMA_CPP_PATH = os.path.join(LLAMA_CPP_HOME, "bin/llama-server")
 CHROMA_DATA_PATH = os.getenv("CHROMA_DATA_PATH")
-CHROMA_PORT = NUMBER_OF_SERVERS + LLAMA_PORT
+CHROMA_PORT = LLAMA_PORT + int(os.getenv("NUMBER_OF_SERVERS")) + 1  # Adjusted for dynamic server count
 CHATML_TEMPLATE = os.getenv("CHATML_TEMPLATE")
 LLAMA3_TEMPLATE = os.getenv("LLAMA3_TEMPLATE")
 CHAT_TEMPLATE = LLAMA3_TEMPLATE if "LLAMA" in general_model_path.upper() else CHATML_TEMPLATE
 MAX_RETRY_ATTEMPTS = 3
 REQUEST_TIMEOUT = 300
-RESTART_WAIT_TIME = 30
-THREADS_BATCH = max(1, NUMBER_OF_CORES // 4)
-RESTART_COMMAND = None
+RESTART_WAIT_TIME = 10
+TOTAL_THREADS_BATCH = max(1, NUMBER_OF_CORES // 4)
 LLM_TIMEOUT = 75
+SERVER_MANAGER = None
 
 
 def extract_port_from_url(url):
@@ -78,18 +76,25 @@ def start_llama_cpp():
     """
     Orchestrates the start of llama-server with all of its requirements
     """
+    global SERVER_MANAGER
     # Change working directory to LLAMA_CPP_HOME for starting llama-server
     cwd = os.getcwd()
     os.chdir(LLAMA_CPP_HOME)
-    # spin up x number of servers
-    processes_ports = spin_up_server(number_of_servers=NUMBER_OF_SERVERS)
+    # spin up servers including standby
+    number_of_servers = int(os.getenv("NUMBER_OF_SERVERS"))
+    server_manager = ServerManager(number_of_servers)
     # check health of all servers
+    processes_ports = [(server.process, server.port) for server in
+                       server_manager.servers + [server_manager.standby_server]]
     check_server_health(processes_ports)
     # Create a list of available servers
-    for process_port in processes_ports:
-        LLAMA_CPP_ENDPOINTS.append(f"http://{HOST}:{process_port[1]}")
+    LLAMA_CPP_ENDPOINTS.clear()
+    for server in server_manager.servers:
+        LLAMA_CPP_ENDPOINTS.append(f"http://{HOST}:{server.port}")
     # Change back to the original working directory
     os.chdir(cwd)
+    # Return the server manager for further use
+    SERVER_MANAGER = server_manager
 
 
 def check_server_health(pids_ports):
@@ -105,7 +110,7 @@ def check_server_health(pids_ports):
             for attempt in range(max_attempts):
                 time.sleep(wait_time)
                 try:
-                    # Use curl to check the server's /docs endpoint
+                    # Use curl to check the server's /health endpoint
                     curl_command = ["curl", "-s", f"http://localhost:{process_port[1]}/health"]
                     result = subprocess.run(curl_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                     stdout = result.stdout.decode('utf-8')
@@ -132,18 +137,19 @@ def check_server_health(pids_ports):
 
 def spin_up_server(number_of_servers):
     """
-    Starts up llama-server x (number_of_servers) with pre-configured params
+    Starts up llama-server (number_of_servers + 1) with pre-configured params
     """
-    global RESTART_COMMAND
-    # Automatically adjust GPU layers, batch sizes, and thread settings based on server count
-    gpu_layers = GPU_LAYERS if number_of_servers == 1 else str(int(GPU_LAYERS) // number_of_servers)
-    batch_size = str(BATCH_SIZE) if number_of_servers == 1 else str(BATCH_SIZE // number_of_servers)
-    ubatch_size = str(UBATCH_SIZE) if number_of_servers == 1 else str(UBATCH_SIZE // number_of_servers)
-    threads = str(NUMBER_OF_CORES) if number_of_servers == 1 else str(NUMBER_OF_CORES // number_of_servers)
-    threads_batch = str(THREADS_BATCH) if number_of_servers == 1 else str(THREADS_BATCH // number_of_servers)
+    total_servers = number_of_servers + 1  # Including the standby server
 
-    processes_ports = []
-    for i in range(number_of_servers):
+    # Adjust resource allocation per server
+    gpu_layers_per_server = str(max(1, GPU_LAYERS // total_servers))
+    batch_size_per_server = str(max(1, TOTAL_BATCH_SIZE // total_servers))
+    ubatch_size_per_server = str(max(1, TOTAL_UBATCH_SIZE // total_servers))
+    threads_per_server = str(max(1, NUMBER_OF_CORES // total_servers))
+    threads_batch_per_server = str(max(1, TOTAL_THREADS_BATCH // total_servers))
+
+    processes_ports_commands = []
+    for i in range(total_servers):
         PORT = LLAMA_PORT + i
         kill_process_on_port(PORT)
         # Form the command list dynamically
@@ -152,16 +158,19 @@ def spin_up_server(number_of_servers):
             "--host", HOST,
             "--port", str(PORT),
             "--model", GENERAL_MODEL_PATH,
-            "--ctx-size", str(CONTEXT_WINDOW),  # Specify context window size if needed
-            "--gpu-layers", gpu_layers,  # Adjust GPU layers based on server count
-            "--threads", threads,  # Adjust threads for CPU utilization
-            "--threads-batch", threads_batch,  # Adjust threads batch dynamically
-            "--batch-size", batch_size,  # Dynamically adjust batch size
-            "--ubatch-size", ubatch_size  # Adjust micro-batch size
+            "--repeat-last-n", "0",
+            "--gpu-layers", gpu_layers_per_server,  # Adjust GPU layers based on server count
+            "--threads", threads_per_server,  # Adjust threads for CPU utilization
+            "--threads-batch", threads_batch_per_server,  # Adjust threads batch dynamically
+            "--batch-size", batch_size_per_server,  # Dynamically adjust batch size
+            "--ubatch-size", ubatch_size_per_server,  # Adjust micro-batch size
+            "--dump-kv-cache",
+            "--penalize-nl",  # Penalize creating new lines
+            "--seed", "42"
         ]
-        RESTART_COMMAND = command
-        processes_ports.append((subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE), PORT))
-    return processes_ports
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        processes_ports_commands.append((process, PORT, command))
+    return processes_ports_commands
 
 
 def file_cleanup(filename):
@@ -213,22 +222,15 @@ def start_chroma_db(chroma_db_path=CHROMA_DATA_PATH):
         os.chdir(cwd)
 
 
-async def restart_llama_server(port):
+async def restart_llama_server(port, command):
     """
     Restart the llama-server running on the specified port and wait for it to be ready.
     :param port: Port on which the llama-server is running.
+    :param command: The command to start the server.
     """
-    global RESTART_COMMAND
     try:
-        # rebuild restart command to adjust for potential port change
-        port_index = RESTART_COMMAND.index("--port") + 1
-        command = RESTART_COMMAND[:port_index] + [str(port)] + RESTART_COMMAND[port_index + 1:]
-
         # Kill any process using the specified port
         kill_process_on_port(port)
-
-        # Wait for a bit to ensure the process is fully stopped
-        await asyncio.sleep(5)
 
         # Restart the server with the provided command
         subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -259,7 +261,6 @@ def kill_process_on_port(port, force_kill=True):
 
                 # Try to terminate the process gracefully
                 process.terminate()
-                time.sleep(10)  # Wait a bit to ensure termination
 
                 # If force_kill is True and process is still running, kill it
                 if force_kill and process.is_running():
@@ -273,12 +274,78 @@ def kill_process_on_port(port, force_kill=True):
         raise HTTPException(status_code=500, detail=f"Error killing process on port {port}: {e}")
 
 
+class Server:
+    def __init__(self, process, port, status='active', restart_command=None):
+        self.process = process
+        self.port = port
+        self.call_count = 0
+        self.status = status  # 'active' or 'standby'
+        self.restart_command = restart_command
+
+    def __eq__(self, other):
+        return isinstance(other, Server) and self.port == other.port
+
+
+class ServerManager:
+    def __init__(self, number_of_servers):
+        self.number_of_servers = number_of_servers
+        self.servers = []
+        self.standby_server = None
+        self.lock = threading.Lock()
+        self.initialize_servers()
+
+    def initialize_servers(self):
+        # Start servers
+        processes_ports_commands = spin_up_server(self.number_of_servers)
+        # The last server is the standby
+        for i, (process, port, command) in enumerate(processes_ports_commands):
+            if i < self.number_of_servers:
+                server = Server(process, port, status='active', restart_command=command)
+                self.servers.append(server)
+            else:
+                # Standby server
+                server = Server(process, port, status='standby', restart_command=command)
+                self.standby_server = server
+
+    def increment_call_count(self, server):
+        with self.lock:
+            server.call_count += 1
+            if server.call_count >= 10:
+                # Trigger restart process
+                threading.Thread(target=self.restart_server, args=(server,)).start()
+
+    def restart_server(self, server):
+        with self.lock:
+            # Swap with standby server
+            print(f"Restarting server on port {server.port}")
+            # Get the index of the server to restart
+            active_index = self.servers.index(server)
+
+            # Swap statuses
+            self.standby_server.status = 'active'
+            standby_port = self.standby_server.port
+
+            self.servers[active_index] = self.standby_server
+            self.standby_server = server
+            self.standby_server.status = 'standby'
+            self.standby_server.call_count = 0
+
+            # Update LLAMA_CPP_ENDPOINTS
+            LLAMA_CPP_ENDPOINTS[active_index] = f"http://{HOST}:{standby_port}"
+
+            # Now restart the standby server (which was previously active)
+            port = self.standby_server.port
+            asyncio.run(restart_llama_server(port, self.standby_server.restart_command))
+
+
 # Load the tokenizer
 with open(classifier_tokenizer, 'rb') as handle:
     tokenizer = pickle.load(handle)
 
 # Load the ONNX model
-classifier = ort.InferenceSession(classifier_model, providers=['CoreMLExecutionProvider'])
+classifier = ort.InferenceSession(
+    classifier_model,
+    providers=['CUDAExecutionProvider', 'CoreMLExecutionProvider', 'CPUExecutionProvider'])
 
 # Available Classifications
 classifications = {
