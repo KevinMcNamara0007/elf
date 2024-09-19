@@ -310,7 +310,7 @@ class ServerManager:
     def increment_call_count(self, server):
         with self.lock:
             server.call_count += 1
-            if server.call_count >= 10:
+            if server.call_count >= 30:
                 # Trigger restart process
                 threading.Thread(target=self.restart_server, args=(server,)).start()
 
