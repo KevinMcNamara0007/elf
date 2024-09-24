@@ -6,10 +6,8 @@ import subprocess
 import shutil
 import urllib.parse
 from time import sleep
-
 import asyncio
 import threading
-
 import psutil
 from dotenv import load_dotenv
 import onnxruntime as ort
@@ -20,7 +18,7 @@ from fastapi import HTTPException
 # Import ENV Vars
 load_dotenv(os.getenv("ENV", "config/.env-dev"))
 SPLIT_SYMBOL = os.getenv("SPLIT_SYMBOL")
-general_model_path = os.getenv("general")
+general_model_path = os.getenv("general", "efs/models/Llama-3.1.gguf")
 classifier_tokenizer = os.getenv("classifier_tokenizer")
 classifier_model = os.getenv("classifier_model")
 HOST = os.getenv("HOST", "127.0.0.1")
@@ -77,6 +75,7 @@ def start_llama_cpp():
     Orchestrates the start of llama-server with all of its requirements
     """
     global SERVER_MANAGER
+    check_or_find_gguf_file()
     # Change working directory to LLAMA_CPP_HOME for starting llama-server
     cwd = os.getcwd()
     os.chdir(LLAMA_CPP_HOME)
@@ -95,6 +94,35 @@ def start_llama_cpp():
     os.chdir(cwd)
     # Return the server manager for further use
     SERVER_MANAGER = server_manager
+
+
+def check_or_find_gguf_file():
+    """
+    Check if the general file path exists. If not, try to find any file with a .gguf extension
+    in the same directory. If no .gguf file is found, raise a FileNotFoundError.
+
+    :return: The found file path (either the original or a .gguf file found in the directory).
+    :raises FileNotFoundError: If neither the file nor any .gguf file is found.
+    """
+    global GENERAL_MODEL_PATH
+    # Check if the given file path exists
+    if os.path.exists(GENERAL_MODEL_PATH):
+        print(f"File exists: {GENERAL_MODEL_PATH}")
+    else:
+        print(f"File does not exist: {GENERAL_MODEL_PATH}")
+
+        # Get the directory containing the file
+        directory = os.path.dirname(GENERAL_MODEL_PATH)
+
+        # List all files in the directory and find any .gguf file
+        gguf_files = [f for f in os.listdir(directory) if f.endswith('.gguf')]
+
+        if gguf_files:
+            print(f"Found .gguf file: {gguf_files}")
+            GENERAL_MODEL_PATH = os.path.join(os.getcwd(), "efs", "models", gguf_files[0])
+        else:
+            # Raise an error if no .gguf file is found
+            raise FileNotFoundError(f"No .gguf file found in directory: {directory}")
 
 
 def check_server_health(pids_ports):
