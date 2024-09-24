@@ -1,6 +1,6 @@
 import chromadb
 from chromadb.api.types import IncludeEnum
-from chromadb.db.base import NotFoundError
+from chromadb.errors import NotFoundError
 from chromadb.errors import DuplicateIDError
 from fastapi import HTTPException
 from src.utilities.general import HOST, CHROMA_PORT, SPLIT_SYMBOL

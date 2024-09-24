@@ -43,10 +43,12 @@ FROM env-build AS app
 
 WORKDIR /app
 
-COPY . .
+COPY requirements.txt requirements.txt
 
 # Install project requirements
 RUN pip install -r requirements.txt
+
+COPY . .
 
 # Expose the necessary port (if applicable)
 EXPOSE 8000-8010

@@ -4,7 +4,8 @@ import numpy as np
 import requests
 from fastapi import HTTPException
 from src.utilities.general import (classifications, tokenizer, classifier,
-                                   NUMBER_OF_SERVERS, CHATML_TEMPLATE)
+                                   NUMBER_OF_SERVERS, CHATML_TEMPLATE, extract_port_from_url,
+                                   LLM_TIMEOUT, SERVER_MANAGER)
 
 
 def load_model(key):
@@ -95,10 +96,7 @@ def convert_to_chat_template(rules, messages, template=CHATML_TEMPLATE):
         return rules + llama3_template(messages) + "Llama:"
 
 
-async def fetch_llama_cpp_response(rules, messages, temperature, key, top_k=40, top_p=.95):
-    """
-    Sends request to llama-server for inference
-    """
+async def fetch_llama_cpp_response(rules, messages, temperature, key, top_k=40, top_p=0.95):
     global BALANCER_MAX_OPTION
     global CURRENT_BALANCER_SELECTION
     try:
@@ -114,87 +112,70 @@ async def fetch_llama_cpp_response(rules, messages, temperature, key, top_k=40, 
         }
 
         expert_url = f"{expert_urls[CURRENT_BALANCER_SELECTION]}/completion"
-        CURRENT_BALANCER_SELECTION = (CURRENT_BALANCER_SELECTION + 1) % BALANCER_MAX_OPTION
-        async with httpx.AsyncClient(timeout=300) as client:
-            expert_response = await client.post(expert_url, json=payload)
-            expert_response.raise_for_status()
-            response_data = expert_response.json()
-        return response_data
-    except httpx.RequestError as e:
-        print("Network Error:", str(e))
-        raise HTTPException(status_code=500, detail=f"Network error while fetching response from llama.cpp: {e}")
+        async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
+            response = await client.post(expert_url, json=payload)
+            response.raise_for_status()
+            port = extract_port_from_url(expert_url)
+            for server in SERVER_MANAGER.servers:
+                if server.port == port:
+                    SERVER_MANAGER.increment_call_count(server)
+            CURRENT_BALANCER_SELECTION = (CURRENT_BALANCER_SELECTION + 1) % int(BALANCER_MAX_OPTION)
+            return response.json()
     except Exception as exc:
-        print("Response Error:", str(exc))
+        print(f"Response Error: {str(exc)}")
         raise HTTPException(status_code=500, detail=f"Could not fetch response from llama.cpp: {exc.args}")
 
 
 async def fetch_pro(prompt, output_tokens, key):
-    """
-    Sends request to llama-server for inference
-    """
     global BALANCER_MAX_OPTION
     global CURRENT_BALANCER_SELECTION
-    llama = f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>{prompt}<|start_header_id|>user<|end_header_id|><|eot_id|>assistant"
     try:
+        llama = f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>{prompt}<|start_header_id|>user<|end_header_id|><|eot_id|>assistant"
         expert_urls = load_model(key)
         payload = {
             "prompt": llama,
             "stream": False,
             "n_predict": math.ceil(output_tokens),
             "temperature": 0.8,
-            "stop":
-                ["</s>",
-                 "<|end|>",
-                 "<|eot_id|>",
-                 "<|end_of_text|>",
-                 "<|im_end|>",
-                 "<|EOT|>",
-                 "<|END_OF_TURN_TOKEN|>",
-                 "<|end_of_turn|>",
-                 "<|endoftext|>",
-                 "assistant",
-                 "user"],
-            "repeat_last_n":0,
-            "repeat_penalty":1,
-            "penalize_nl":False,
-            "top_k":0,
-            "top_p":1,
-            "min_p":0.05,
-            "tfs_z":1,
-            "typical_p":1,
-            "presence_penalty":0,
-            "frequency_penalty":0,
-            "mirostat":0,
-            "mirostat_tau":5,
-            "mirostat_eta":0.1,
-            "grammar":"",
-            "n_probs":0,
-            "min_keep":0,
-            "image_data":[],
-            "cache_prompt":False,
-            "api_key":""
+            "stop": ["</s>", "<|end|>", "<|eot_id|>", "<|end_of_text|>", "<|im_end|>", "<|EOT|>",
+                     "<|END_OF_TURN_TOKEN|>", "<|end_of_turn|>", "<|endoftext|>", "assistant", "user"],
+            "repeat_last_n": 0,
+            "repeat_penalty": 1,
+            "penalize_nl": False,
+            "top_k": 0,
+            "top_p": 1,
+            "min_p": 0.05,
+            "tfs_z": 1,
+            "typical_p": 1,
+            "presence_penalty": 0,
+            "frequency_penalty": 0,
+            "mirostat": 0,
+            "mirostat_tau": 5,
+            "mirostat_eta": 0.1,
+            "grammar": "",
+            "n_probs": 0,
+            "min_keep": 0,
+            "image_data": [],
+            "cache_prompt": False,
+            "api_key": ""
         }
 
         expert_url = f"{expert_urls[CURRENT_BALANCER_SELECTION]}/completion"
-        CURRENT_BALANCER_SELECTION = (CURRENT_BALANCER_SELECTION + 1) % BALANCER_MAX_OPTION
-        async with httpx.AsyncClient(timeout=500) as client:
-            expert_response = await client.post(expert_url, json=payload)
-            expert_response.raise_for_status()
-            response_data = expert_response.json()
-        return response_data
-    except httpx.RequestError as e:
-        print(e)
-        print("Network Error:", str(e))
-        raise HTTPException(status_code=500, detail=f"Network error while fetching response from llama.cpp: {e}")
+        async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
+            response = await client.post(expert_url, json=payload)
+            response.raise_for_status()
+            port = extract_port_from_url(expert_url)
+            for server in SERVER_MANAGER.servers:
+                if server.port == port:
+                    SERVER_MANAGER.increment_call_count(server)
+            CURRENT_BALANCER_SELECTION = (CURRENT_BALANCER_SELECTION + 1) % int(BALANCER_MAX_OPTION)
+            return response.json()
     except Exception as exc:
-        print("Response Error:", str(exc))
+        print(f"Response Error: {str(exc)}")
         raise HTTPException(status_code=500, detail=f"Could not fetch response from llama.cpp: {exc.args}")
 
 
 async def fetch_llama_cpp_response_stream(rules, messages, temperature, key, top_k=40, top_p=0.95):
-    """
-    Sends request to llama-server for inference and streams the response back.
-    """
     global BALANCER_MAX_OPTION
     global CURRENT_BALANCER_SELECTION
     try:
@@ -203,7 +184,6 @@ async def fetch_llama_cpp_response_stream(rules, messages, temperature, key, top
         payload = {
             "prompt": prompt,
             "stream": True,  # Enable streaming in the request
-            "n_predict": -1,
             "temperature": temperature,
             "stop": STOP_SYMBOLS,
             "top_k": top_k,
@@ -211,16 +191,22 @@ async def fetch_llama_cpp_response_stream(rules, messages, temperature, key, top
         }
 
         expert_url = f"{expert_urls[CURRENT_BALANCER_SELECTION]}/completion"
-        CURRENT_BALANCER_SELECTION = (CURRENT_BALANCER_SELECTION + 1) % BALANCER_MAX_OPTION
-        async with httpx.AsyncClient(timeout=300) as client:
-            async with client.stream("POST", expert_url, json=payload) as response:
-                async for chunk in response.aiter_text():
-                    yield chunk  # Yield each chunk as it is received
-    except httpx.RequestError as e:
-        print("Network Error:", str(e))
-        raise HTTPException(status_code=500, detail=f"Network error while fetching response from llama.cpp: {e}")
+        port = extract_port_from_url(expert_url)
+        CURRENT_BALANCER_SELECTION = (CURRENT_BALANCER_SELECTION + 1) % int(BALANCER_MAX_OPTION)
+
+        async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
+            response = await client.post(expert_url, json=payload)
+            response.raise_for_status()
+
+            for server in SERVER_MANAGER.servers:
+                if server.port == port:
+                    SERVER_MANAGER.increment_call_count(server)
+
+            # Streaming response chunks
+            async for chunk in response.aiter_text():
+                yield chunk
     except Exception as exc:
-        print("Response Error:", str(exc))
+        print(f"Response Error: {str(exc)}")
         raise HTTPException(status_code=500, detail=f"Could not fetch response from llama.cpp: {exc.args}")
 
 
@@ -240,3 +226,62 @@ def get_free_url(urls):
     except Exception as exc:
         print(str(exc))
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+async def call_openai(prompt: str, api_key: str):
+    """
+    Call the OpenAI API with the provided prompt and API key.
+
+    :param prompt: The prompt for the LLM.
+    :param api_key: The OpenAI API key.
+    :return: The response from the OpenAI LLM.
+    """
+    openai_url = "https://api.openai.com/v1/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": "gpt-3.5-turbo",
+        "prompt": prompt,
+        "max_tokens": 100,
+        "temperature": 0.7
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=120) as client:
+            response = await client.post(openai_url, json=payload, headers=headers)
+            response.raise_for_status()
+            return response.json()
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=500, detail=f"Error calling OpenAI: {exc}")
+
+
+async def call_claude(prompt: str, api_key: str):
+    """
+    Call the Claude API with the provided prompt and API key.
+
+    :param prompt: The prompt for the LLM.
+    :param api_key: The Claude API key.
+    :return: The response from the Claude LLM.
+    """
+    claude_url = "https://api.anthropic.com/v1/complete"
+    headers = {
+        "x-api-key": api_key,
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "prompt": prompt,
+        "max_tokens_to_sample": 100,
+        "stop_sequences": ["\n"],
+        "temperature": 0.7,
+        "model": "claude-v1"
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=120) as client:
+            response = await client.post(claude_url, json=payload, headers=headers)
+            response.raise_for_status()
+            return response.json()
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=500, detail=f"Error calling Claude: {exc}")
