@@ -52,9 +52,11 @@ FROM env-build AS app
 
 WORKDIR /app
 
-COPY . .
+COPY requirements-app.txt requirements-app.txt
 
 RUN pip install -r requirements-app.txt
+
+COPY . .
 
 # Expose the necessary port (if applicable)
 EXPOSE 8000-8010
