@@ -1,8 +1,10 @@
+import json
+
 from fastapi import HTTPException
 
 from src.utilities.general import classifications
 from src.utilities.inference import fetch_llama_cpp_response, classify_prompt, fetch_llama_cpp_response_stream, \
-    fetch_pro, call_openai, call_claude
+    fetch_pro, call_openai, call_claude, fetch_pro_stream
 
 
 async def get_expert_response(rules, messages, temperature=0.05, top_k=40, top_p=.95):
@@ -60,6 +62,18 @@ async def get_pro_response(prompt, output_tokens):
         }],
         'timings': response['timings']
     }
+
+
+async def get_pro_response_stream(prompt, output_tokens):
+    """
+    Fetches response from llama-server and recalls if generation is truncated. Returns the full response.
+    """
+    key = await classify_prompt(prompt)
+    async for chunk in fetch_pro_stream(prompt=prompt,output_tokens=output_tokens, key=key):
+        arr = chunk.split(': ', 1)[1]
+        data_dict = json.loads(arr)
+        content = data_dict.get('content')
+        yield content
 
 
 async def get_expert_response_stream(rules, messages, temperature=0.05, top_k=40, top_p=0.95):

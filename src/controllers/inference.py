@@ -4,7 +4,7 @@ from starlette.responses import StreamingResponse
 from src.authentication.authentication import verify_token
 from src.modeling.request_models import AskExpertRequest, ClassifyRequest, SemanticSearchRequest, Message, Pro
 from src.services.inference import get_expert_response, prompt_classification, get_expert_response_stream, \
-    get_pro_response, route_llm_request
+    get_pro_response,get_pro_response_stream, route_llm_request
 from src.utilities.crud import query_record
 from src.utilities.general import NO_TOKEN
 
@@ -96,6 +96,31 @@ async def ask_a_pro(
         return await get_pro_response(
             prompt=request.prompt,  # optional the role the LLM should play.
             output_tokens=request.output_tokens
+        )
+    else:
+        raise HTTPException(status_code=400, detail="Provide a prompt")
+
+
+@inference_router.post("/ask_a_pro_stream", status_code=status.HTTP_200_OK, description="Digital Professional Instructions")
+async def ask_a_pro_stream(
+        token: str = Header(default=NO_TOKEN, convert_underscores=False),
+        request: Pro = Body(...)
+):
+    """
+    Ask any question to one of the LLMs.
+    :param token:
+    :param request:
+    :return:
+    """
+    assert verify_token(token)
+
+    if request.prompt:
+        return StreamingResponse(
+            get_pro_response_stream(
+                prompt=request.prompt,  # optional the role the LLM should play.
+                output_tokens=request.output_tokens
+            ),
+            media_type="text_plain"
         )
     else:
         raise HTTPException(status_code=400, detail="Provide a prompt")
