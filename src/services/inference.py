@@ -1,6 +1,8 @@
+import json
 import math
 from src.utilities.general import classifications, INPUT_WINDOW
-from src.utilities.inference import fetch_llama_cpp_response, classify_prompt, fetch_llama_cpp_response_stream, fetch_pro
+from src.utilities.inference import fetch_llama_cpp_response, classify_prompt, fetch_llama_cpp_response_stream, \
+    fetch_pro, fetch_pro_stream
 
 
 async def get_expert_response(rules, messages, temperature=0.05, top_k=40, top_p=.95):
@@ -84,3 +86,16 @@ def prompt_classification(prompt):
     Classifies a given prompt using the cnn classifier.
     """
     return classify_prompt(prompt, text=True)
+
+
+async def get_pro_response_stream(prompt, output_tokens):
+    """
+    Fetches response from llama-server and recalls if generation is truncated. Returns the full response.
+    """
+    key = await classify_prompt(prompt)
+    async for chunk in fetch_pro_stream(prompt=prompt,output_tokens=output_tokens, key=key):
+        arr = chunk.split(': ', 1)[1]
+        data_dict = json.loads(arr)
+        content = data_dict.get('content')
+        yield content
+
