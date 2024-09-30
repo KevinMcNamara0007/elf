@@ -93,7 +93,7 @@ def convert_to_chat_template(rules, messages, template=CHATML_TEMPLATE):
                         "assistant",
                         "user"
                         ]
-        return f"<|im_start|>system\n{rules}<|im_end|>\n{chatml_template(messages)}\nassistant"
+        return f"{chatml_template(messages)}\nassistant"
     else:
         STOP_SYMBOLS = ["</s>", "Llama:", "User:"]
         return rules + llama3_template(messages) + "Llama:"
@@ -111,6 +111,7 @@ async def fetch_llama_cpp_response(rules, messages, temperature, key, top_k=40, 
             "stop": STOP_SYMBOLS,
             "top_k": top_k,
             "top_p": top_p,
+            "system_prompt": rules,
         }
 
         expert_url = f"{SERVER_MANAGER.get_current_server_endpoint()}/completions"
