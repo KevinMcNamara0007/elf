@@ -10,6 +10,7 @@ from src.utilities.general import (classifications, tokenizer, classifier,
 # Initialize the server manager with the number of servers
 SERVER_MANAGER = ServerManager(NUMBER_OF_SERVERS)
 
+
 def load_model(key):
     """
     return a preloaded model given a key.
@@ -17,6 +18,7 @@ def load_model(key):
     :return:
     """
     return classifications.get(key)["Link"]
+
 
 async def classify_prompt(prompt, max_len=100, text=False):
     """
@@ -56,9 +58,11 @@ async def classify_prompt(prompt, max_len=100, text=False):
         # Handle any exceptions during inference
         raise HTTPException(status_code=500, detail=str(exc))
 
+
 BALANCER_MAX_OPTION = NUMBER_OF_SERVERS
 CURRENT_BALANCER_SELECTION = 0
 STOP_SYMBOLS = []
+
 
 def llama3_template(messages):
     transcript = ""
@@ -66,11 +70,13 @@ def llama3_template(messages):
         transcript += f"{'Llama' if 'user' not in message.role.lower() else 'User'}: {message.content}\n\n"
     return transcript
 
+
 def chatml_template(messages):
     transcript = ""
     for message in messages:
         transcript += f"<|im_start|>{'assistant' if 'user' not in message.role.lower() else 'user'}\n {message.content}<|im_end|>\n"
     return transcript
+
 
 def convert_to_chat_template(rules, messages, template=CHATML_TEMPLATE):
     global STOP_SYMBOLS
@@ -92,11 +98,11 @@ def convert_to_chat_template(rules, messages, template=CHATML_TEMPLATE):
         STOP_SYMBOLS = ["</s>", "Llama:", "User:"]
         return rules + llama3_template(messages) + "Llama:"
 
+
 async def fetch_llama_cpp_response(rules, messages, temperature, key, top_k=40, top_p=0.95):
     global BALANCER_MAX_OPTION
     global CURRENT_BALANCER_SELECTION
     try:
-        expert_urls = load_model(key)
         payload = {
             "prompt": convert_to_chat_template(rules, messages, template=CHATML_TEMPLATE),
             "stream": False,
@@ -107,7 +113,7 @@ async def fetch_llama_cpp_response(rules, messages, temperature, key, top_k=40, 
             "top_p": top_p,
         }
 
-        expert_url = f"{expert_urls[CURRENT_BALANCER_SELECTION]}/completion"
+        expert_url = f"{SERVER_MANAGER.get_current_server_endpoint()}/completions"
         async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
             response = await client.post(expert_url, json=payload)
             response.raise_for_status()
@@ -115,12 +121,12 @@ async def fetch_llama_cpp_response(rules, messages, temperature, key, top_k=40, 
             # Increment call count using the server manager
             for server in SERVER_MANAGER.servers:
                 if server.port == port:
-                    SERVER_MANAGER.increment_call_count(SERVER_MANAGER.servers.index(server))
-            CURRENT_BALANCER_SELECTION = (CURRENT_BALANCER_SELECTION + 1) % int(BALANCER_MAX_OPTION)
+                    await SERVER_MANAGER.increment_call_count(SERVER_MANAGER.servers.index(server))
             return response.json()
     except Exception as exc:
         print(f"Response Error: {str(exc)}")
         raise HTTPException(status_code=500, detail=f"Could not fetch response from llama.cpp: {exc.args}")
+
 
 async def fetch_pro(prompt, output_tokens, key):
     global BALANCER_MAX_OPTION
@@ -163,12 +169,13 @@ async def fetch_pro(prompt, output_tokens, key):
             port = extract_port_from_url(expert_url)
             for server in SERVER_MANAGER.servers:
                 if server.port == port:
-                    SERVER_MANAGER.increment_call_count(SERVER_MANAGER.servers.index(server))
+                    await SERVER_MANAGER.increment_call_count(SERVER_MANAGER.servers.index(server))
             CURRENT_BALANCER_SELECTION = (CURRENT_BALANCER_SELECTION + 1) % int(BALANCER_MAX_OPTION)
             return response.json()
     except Exception as exc:
         print(f"Response Error: {str(exc)}")
         raise HTTPException(status_code=500, detail=f"Could not fetch response from llama.cpp: {exc.args}")
+
 
 async def fetch_llama_cpp_response_stream(rules, messages, temperature, key, top_k=40, top_p=0.95):
     global BALANCER_MAX_OPTION
@@ -195,7 +202,7 @@ async def fetch_llama_cpp_response_stream(rules, messages, temperature, key, top
 
             for server in SERVER_MANAGER.servers:
                 if server.port == port:
-                    SERVER_MANAGER.increment_call_count(SERVER_MANAGER.servers.index(server))
+                    await SERVER_MANAGER.increment_call_count(SERVER_MANAGER.servers.index(server))
 
             # Streaming response chunks
             async for chunk in response.aiter_text():
@@ -203,6 +210,7 @@ async def fetch_llama_cpp_response_stream(rules, messages, temperature, key, top
     except Exception as exc:
         print(f"Response Error: {str(exc)}")
         raise HTTPException(status_code=500, detail=f"Could not fetch response from llama.cpp: {exc.args}")
+
 
 def get_free_url(urls):
     """
@@ -220,6 +228,7 @@ def get_free_url(urls):
     except Exception as exc:
         print(str(exc))
         raise HTTPException(status_code=500, detail=str(exc))
+
 
 async def call_openai(prompt: str, api_key: str):
     """
@@ -248,6 +257,7 @@ async def call_openai(prompt: str, api_key: str):
             return response.json()
     except httpx.RequestError as exc:
         raise HTTPException(status_code=500, detail=f"Error calling OpenAI: {exc}")
+
 
 async def call_claude(prompt: str, api_key: str):
     """

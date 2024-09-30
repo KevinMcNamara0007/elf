@@ -1,17 +1,19 @@
 import chromadb
+from chromadb import errors
 from chromadb.api.types import IncludeEnum
-from chromadb.errors import NotFoundError
-from chromadb.errors import DuplicateIDError
 from fastapi import HTTPException
 from src.utilities.general import HOST, CHROMA_PORT, SPLIT_SYMBOL
 
-chroma_client = chromadb.HttpClient(
-    host=HOST,
-    port=CHROMA_PORT
-)
+
+# Lazy initialization for chroma_client
+def get_chroma_client():
+    return chromadb.HttpClient(
+        port=CHROMA_PORT
+    )
 
 
 def add_record(titles, contents, collection_name, metadata=None):
+    chroma_client = get_chroma_client()  # Initialize chroma_client here
     try:
         collection = chroma_client.get_collection(collection_name)
         if not collection:
@@ -25,7 +27,7 @@ def add_record(titles, contents, collection_name, metadata=None):
         return f"{collection_name} record created"
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Invalid Data: {str(e)}")
-    except DuplicateIDError as e:
+    except errors.DuplicateIDError as e:
         raise HTTPException(status_code=400, detail=f"Duplicate ID: {str(e)}")
     except Exception as e:
         print(f"Add Record Error: {str(e)}")
@@ -33,6 +35,7 @@ def add_record(titles, contents, collection_name, metadata=None):
 
 
 def update_record(titles, contents, collection_name):
+    chroma_client = get_chroma_client()  # Initialize chroma_client here
     try:
         collection = chroma_client.get_collection(collection_name)
         if not collection:
@@ -43,7 +46,7 @@ def update_record(titles, contents, collection_name):
             documents=contents.split(SPLIT_SYMBOL)
         )
         return f"{collection_name} record updated"
-    except NotFoundError as e:
+    except ValueError as e:
         raise HTTPException(status_code=404, detail=f"Record not found: {str(e)}")
     except Exception as e:
         print(f"Update Record Error: {str(e)}")
@@ -51,6 +54,7 @@ def update_record(titles, contents, collection_name):
 
 
 def delete_record(titles, collection_name):
+    chroma_client = get_chroma_client()  # Initialize chroma_client here
     try:
         collection = chroma_client.get_collection(collection_name)
         if not collection:
@@ -60,7 +64,7 @@ def delete_record(titles, collection_name):
             ids=titles.split(SPLIT_SYMBOL),
         )
         return f"{collection_name} record deleted"
-    except NotFoundError as e:
+    except ValueError as e:
         raise HTTPException(status_code=404, detail=f"Record not found: {str(e)}")
     except Exception as e:
         print(f"Delete Record Error: {str(e)}")
@@ -68,13 +72,12 @@ def delete_record(titles, collection_name):
 
 
 def get_record(titles, collection_name, text_to_find=None, metadata=None, limit=None):
+    chroma_client = get_chroma_client()  # Initialize chroma_client here
     try:
-        # Fetch the collection
         collection = chroma_client.get_collection(collection_name)
         if not collection:
             raise HTTPException(status_code=404, detail=f"Collection {collection_name} not found")
 
-        # Prepare the query parameters
         query_params = {
             'ids': titles.split(SPLIT_SYMBOL) if titles else None,
             'where': metadata,
@@ -82,11 +85,9 @@ def get_record(titles, collection_name, text_to_find=None, metadata=None, limit=
             'include': [IncludeEnum.documents]
         }
 
-        # Optionally add the text search condition
         if text_to_find:
             query_params['where_document'] = {'$contains': text_to_find}
 
-        # Perform the query
         result = collection.get(**query_params)
         return result
 
@@ -96,6 +97,7 @@ def get_record(titles, collection_name, text_to_find=None, metadata=None, limit=
 
 
 def query_record(query_embedding, collection_name, max_results=5):
+    chroma_client = get_chroma_client()  # Initialize chroma_client here
     try:
         collection = chroma_client.get_collection(collection_name)
         if not collection:
@@ -111,6 +113,7 @@ def query_record(query_embedding, collection_name, max_results=5):
 
 
 def add_collection(collection_name):
+    chroma_client = get_chroma_client()  # Initialize chroma_client here
     try:
         chroma_client.create_collection(
             collection_name
@@ -124,6 +127,7 @@ def add_collection(collection_name):
 
 
 def get_available_record_collections():
+    chroma_client = get_chroma_client()  # Initialize chroma_client here
     try:
         coll_list = chroma_client.list_collections()
         groomed_collection_list = {}
@@ -140,6 +144,7 @@ def get_available_record_collections():
 
 
 def remove_collection(collection_name):
+    chroma_client = get_chroma_client()  # Initialize chroma_client here
     try:
         chroma_client.delete_collection(collection_name)
         return f"{collection_name} removed"

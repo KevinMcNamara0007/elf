@@ -2,16 +2,17 @@ import multiprocessing
 import os
 import pickle
 import platform
+import signal
 import subprocess
 import shutil
 import urllib.parse
 from time import sleep
 import asyncio
-import threading
 import psutil
 from dotenv import load_dotenv
 import onnxruntime as ort
 import time
+import random
 import requests
 from fastapi import HTTPException
 
@@ -40,7 +41,7 @@ API_TOKENS = API_TOKENS.split(",")
 LLAMA_CPP_ENDPOINTS = []
 LLAMA_CPP_PATH = os.path.join(LLAMA_CPP_HOME, "bin/llama-server")
 CHROMA_DATA_PATH = os.getenv("CHROMA_DATA_PATH")
-CHROMA_PORT = LLAMA_PORT + int(os.getenv("NUMBER_OF_SERVERS")) + 1  # Adjusted for dynamic server count
+CHROMA_PORT = LLAMA_PORT + 100  # Adjusted for dynamic server count
 CHATML_TEMPLATE = os.getenv("CHATML_TEMPLATE")
 LLAMA3_TEMPLATE = os.getenv("LLAMA3_TEMPLATE")
 CHAT_TEMPLATE = LLAMA3_TEMPLATE if "LLAMA" in general_model_path.upper() else CHATML_TEMPLATE
@@ -144,6 +145,7 @@ def spin_up_server(number_of_servers):
         command = [
             LLAMA_CPP_PATH,
             "--host", HOST,
+            "--ctx-size", "32000",
             "--port", str(PORT),
             "--model", GENERAL_MODEL_PATH,
             "--repeat-last-n", "0",
@@ -152,9 +154,9 @@ def spin_up_server(number_of_servers):
             "--threads-batch", threads_batch_per_server,
             "--batch-size", batch_size_per_server,
             "--ubatch-size", ubatch_size_per_server,
-            "--dump-kv-cache",
             "--penalize-nl",
-            "--seed", "42"
+            "--seed", "42",
+            "--conversation"
         ]
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         processes_ports_commands.append((process, PORT, command))
@@ -166,6 +168,7 @@ def file_cleanup(filename):
 
 
 def start_chroma_db(chroma_db_path=CHROMA_DATA_PATH):
+    kill_process_on_port(CHROMA_PORT)
     cwd = os.getcwd()
     os.makedirs(chroma_db_path, exist_ok=True)
     os.chdir(chroma_db_path)
@@ -199,33 +202,71 @@ def start_chroma_db(chroma_db_path=CHROMA_DATA_PATH):
         os.chdir(cwd)
 
 
+def kill_process_on_port(port):
+    """
+    Finds and terminates the process running on the specified port.
+    """
+    for conn in psutil.net_connections(kind='inet'):
+        # Check if the connection is listening or established on the specified port
+        if conn.laddr.port == port and conn.status == psutil.CONN_LISTEN:
+            # Get the process ID (pid) associated with the connection
+            pid = conn.pid
+            if pid is not None:
+                try:
+                    # Get the process by pid and terminate it gracefully
+                    proc = psutil.Process(pid)
+                    print(f"Terminating process {proc.name()} with PID {pid} on port {port}")
+                    proc.terminate()  # Sends SIGTERM
+                    proc.wait(timeout=3)  # Wait up to 3 seconds for the process to terminate
+                except psutil.NoSuchProcess:
+                    print(f"No process found with PID {pid}")
+                except psutil.TimeoutExpired:
+                    print(f"Process {pid} did not terminate in time, forcing a kill.")
+                    proc.kill()  # Sends SIGKILL if termination fails
+                except Exception as e:
+                    print(f"Error terminating process on port {port}: {e}")
+
+
+async def kill_process_on_port_async(port):
+    """
+    Finds and terminates the process running on the specified port.
+    """
+    for conn in psutil.net_connections(kind='inet'):
+        # Check if the connection is listening or established on the specified port
+        if conn.laddr.port == port and conn.status == psutil.CONN_LISTEN:
+            # Get the process ID (pid) associated with the connection
+            pid = conn.pid
+            if pid is not None:
+                try:
+                    # Get the process by pid and terminate it gracefully
+                    proc = psutil.Process(pid)
+                    print(f"Terminating process {proc.name()} with PID {pid} on port {port}")
+                    proc.terminate()  # Sends SIGTERM
+                    proc.wait(timeout=3)  # Wait up to 3 seconds for the process to terminate
+                except psutil.NoSuchProcess:
+                    print(f"No process found with PID {pid}")
+                except psutil.TimeoutExpired:
+                    print(f"Process {pid} did not terminate in time, forcing a kill.")
+                    proc.kill()  # Sends SIGKILL if termination fails
+                except Exception as e:
+                    print(f"Error terminating process on port {port}: {e}")
+
+
 async def restart_llama_server(port, command):
     try:
-        kill_process_on_port(port)
-        subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        await asyncio.sleep(RESTART_WAIT_TIME)
+        await kill_process_on_port_async(port)  # Ensure the old process is killed asynchronously
+
+        # Restart llama server using asyncio to prevent blocking
+        process = await asyncio.create_subprocess_exec(
+            *command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
         print(f"llama-server restarted on port {port}")
+        return process
     except Exception as e:
         print(f"Failed to restart llama-server on port {port}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to restart llama-server: {e}")
-
-
-def kill_process_on_port(port, force_kill=True):
-    try:
-        process = psutil.Process()
-        for connection in process.connections(kind='inet'):
-            if connection.laddr.port == port:
-                pid = connection.pid
-                if force_kill:
-                    os.kill(pid, 9)
-                else:
-                    os.kill(pid, 15)
-                print(f"Killed process running on port {port}.")
-    except Exception as e:
-        print(f"Failed to kill process on port {port}: {str(e)}")
-
-
-import random
+        raise Exception(f"Failed to restart llama-server: {e}")
 
 
 class Server:
@@ -239,42 +280,58 @@ class Server:
 class ServerManager:
     def __init__(self, number_of_servers):
         servers_pids_ports_commands = spin_up_server(number_of_servers)
-        self.servers = [Server(process, port) for process, port, _ in servers_pids_ports_commands[:-1]]
-        standby_process, standby_port, standby_command = servers_pids_ports_commands[-1]
-        self.standby_server = Server(standby_process, standby_port)
-        self.standby_command = standby_command
-        self.lock = threading.Lock()
+        self.servers = [Server(process, port) for process, port, _ in servers_pids_ports_commands]
+        self.standby_server = self.servers.pop()  # Remove the last server as the standby
+        self.active_servers = self.servers  # All remaining servers are active
+        self.lock = asyncio.Lock()  # Async lock for safe access
+        self.current_server_index = 0  # Track the current active server index for round-robin
 
-    def increment_call_count(self, server_index):
-        server = self.servers[server_index]
-        server.call_count += 1
+    async def increment_call_count(self, server_index):
+        async with self.lock:
+            server = self.active_servers[server_index]
+            server.call_count += 1
+            print(f"Active server on port {server.port} has handled {server.call_count} calls.")
 
-        # Check if call count exceeds max_calls
-        if server.call_count >= server.max_calls:
-            print(f"Server on port {server.port} has reached {server.call_count} calls and will be swapped.")
-            asyncio.run(self.swap_and_restart_server(server_index))
+            # Check if the server has reached its max call count
+            if server.call_count >= server.max_calls:
+                print(f"Server on port {server.port} reached max calls. Swapping with standby server.")
+                asyncio.create_task(self.swap_server(server_index))  # Handle the swap in the background
 
-    async def swap_and_restart_server(self, server_index):
-        with self.lock:
-            server = self.servers[server_index]
-            standby = self.standby_server
-
-            # Swap the server with the standby server
-            self.servers[server_index], self.standby_server = standby, server
-            print(f"Swapping server on port {server.port} with standby server on port {standby.port}.")
-
-            # Reset call count and assign new max_calls for the newly active server
-            self.servers[server_index].call_count = 0
-            self.servers[server_index].max_calls = random.randint(25, 35)
+    async def swap_server(self, server_index):
+        async with self.lock:
+            active_server = self.active_servers[server_index]
             print(
-                f"New server on port {self.servers[server_index].port} will handle {self.servers[server_index].max_calls} calls.")
+                f"Swapping active server on port {active_server.port} with standby server on port {self.standby_server.port}.")
 
-            # Restart the old server (now standby)
-            await restart_llama_server(server.port, self.standby_command)
+            # Promote the standby server to active
+            self.active_servers[server_index] = self.standby_server
 
-    def handle_request(self, server_index):
-        # Handle request logic (e.g., processing API calls, inference, etc.)
-        self.increment_call_count(server_index)
+            # Reset call count and max_calls for the new active server
+            self.standby_server.call_count = 0
+            self.standby_server.max_calls = random.randint(25, 35)
+            print(
+                f"New active server on port {self.standby_server.port} will handle {self.standby_server.max_calls} calls.")
+
+            # Restart the old active server as the new standby in the background
+            old_standby = active_server  # Save reference to the old active server
+
+            # Restart the standby server asynchronously
+            asyncio.create_task(self.restart_standby(old_standby))
+
+            # Set the old active server as the new standby
+            self.standby_server = old_standby
+
+    async def restart_standby(self, server):
+        print(f"Restarting server on port {server.port} in the background...")
+        # Ensure you're using an async-friendly subprocess call to restart the server
+        server.process = await restart_llama_server(server.port, server.process.args)
+        print(f"Server on port {server.port} restarted and ready as standby.")
+
+    def get_current_server_endpoint(self):
+        # Return the endpoint of the active server in a round-robin manner
+        self.current_server_index = (self.current_server_index + 1) % len(
+            self.active_servers)  # Move to the next server
+        return f"http://localhost:{self.active_servers[self.current_server_index].port}"
 
 
 # Load the tokenizer
