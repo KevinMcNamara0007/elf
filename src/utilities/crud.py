@@ -1,19 +1,12 @@
-import chromadb
 from chromadb.api.types import IncludeEnum
-from chromadb.db.base import NotFoundError
 from chromadb.errors import DuplicateIDError
 from fastapi import HTTPException
-from src.utilities.general import HOST, CHROMA_PORT, SPLIT_SYMBOL
-
-chroma_client = chromadb.HttpClient(
-    host=HOST,
-    port=CHROMA_PORT
-)
+from src.utilities.general import SPLIT_SYMBOL, chroma_manager
 
 
 def add_record(titles, contents, collection_name, metadata=None):
     try:
-        collection = chroma_client.get_collection(collection_name)
+        collection = chroma_manager.client.get_collection(collection_name)
         if not collection:
             raise HTTPException(status_code=404, detail=f"Collection {collection_name} not found")
 
@@ -34,7 +27,7 @@ def add_record(titles, contents, collection_name, metadata=None):
 
 def update_record(titles, contents, collection_name):
     try:
-        collection = chroma_client.get_collection(collection_name)
+        collection = chroma_manager.client.get_collection(collection_name)
         if not collection:
             raise HTTPException(status_code=404, detail=f"Collection {collection_name} not found")
 
@@ -43,8 +36,6 @@ def update_record(titles, contents, collection_name):
             documents=contents.split(SPLIT_SYMBOL)
         )
         return f"{collection_name} record updated"
-    except NotFoundError as e:
-        raise HTTPException(status_code=404, detail=f"Record not found: {str(e)}")
     except Exception as e:
         print(f"Update Record Error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error updating record: {titles}")
@@ -52,7 +43,7 @@ def update_record(titles, contents, collection_name):
 
 def delete_record(titles, collection_name):
     try:
-        collection = chroma_client.get_collection(collection_name)
+        collection = chroma_manager.client.get_collection(collection_name)
         if not collection:
             raise HTTPException(status_code=404, detail=f"Collection {collection_name} not found")
 
@@ -60,8 +51,6 @@ def delete_record(titles, collection_name):
             ids=titles.split(SPLIT_SYMBOL),
         )
         return f"{collection_name} record deleted"
-    except NotFoundError as e:
-        raise HTTPException(status_code=404, detail=f"Record not found: {str(e)}")
     except Exception as e:
         print(f"Delete Record Error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error deleting record: {titles}")
@@ -70,7 +59,7 @@ def delete_record(titles, collection_name):
 def get_record(titles, collection_name, text_to_find=None, metadata=None, limit=None):
     try:
         # Fetch the collection
-        collection = chroma_client.get_collection(collection_name)
+        collection = chroma_manager.client.get_collection(collection_name)
         if not collection:
             raise HTTPException(status_code=404, detail=f"Collection {collection_name} not found")
 
@@ -97,7 +86,7 @@ def get_record(titles, collection_name, text_to_find=None, metadata=None, limit=
 
 def query_record(query_embedding, collection_name, max_results=5):
     try:
-        collection = chroma_client.get_collection(collection_name)
+        collection = chroma_manager.client.get_collection(collection_name)
         if not collection:
             raise HTTPException(status_code=404, detail=f"Collection {collection_name} not found")
 
@@ -112,7 +101,7 @@ def query_record(query_embedding, collection_name, max_results=5):
 
 def add_collection(collection_name):
     try:
-        chroma_client.create_collection(
+        chroma_manager.client.create_collection(
             collection_name
         )
         return f"{collection_name} collection created"
@@ -125,7 +114,7 @@ def add_collection(collection_name):
 
 def get_available_record_collections():
     try:
-        coll_list = chroma_client.list_collections()
+        coll_list = chroma_manager.client.list_collections()
         groomed_collection_list = {}
         for collection in coll_list:
             name = collection.name
@@ -141,7 +130,7 @@ def get_available_record_collections():
 
 def remove_collection(collection_name):
     try:
-        chroma_client.delete_collection(collection_name)
+        chroma_manager.client.delete_collection(collection_name)
         return f"{collection_name} removed"
     except Exception as e:
         print(str(e))

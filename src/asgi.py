@@ -1,16 +1,8 @@
-from src.utilities.general import start_llama_cpp, stop_aux_servers, HOST, UVICORN_PORT, handle_sigterm, start_chroma_db
-print("Starting Llama.cpp")
-start_llama_cpp()
-print("Starting ChromaDB")
-start_chroma_db()
-print("Started aux servers...Starting FastAPI")
+from src.utilities.general import start_aux_servers, stop_aux_servers
 from contextlib import asynccontextmanager
-import signal
-import uvicorn
 from fastapi import FastAPI
-from fastapi.exceptions import RequestValidationError
+from fastapi.exceptions import RequestValidationError, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.exceptions import HTTPException
 from starlette.responses import RedirectResponse
 from src.controllers import inference, crud
 from src.utilities.exception_handlers import request_validation_exception_handler, http_exception_handler, \
@@ -21,11 +13,13 @@ from log_management.middleware import log_request_middleware, CacheRequestBodyMi
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
+        await start_aux_servers()
         yield
     finally:
-        stop_aux_servers()
+        stop_aux_servers()  # Stop servers
 
 
+# Initialize FastAPI app
 elf = FastAPI(
     title="Expert LLM Framework",
     summary="Delivers responses from available expert models.",
@@ -60,9 +54,3 @@ elf.add_exception_handler(Exception, unhandled_exception_handler)
 @elf.get("/", include_in_schema=False)
 async def docs_redirect():
     return RedirectResponse(url="/docs")
-
-
-signal.signal(signal.SIGTERM, handle_sigterm)
-
-if __name__ == "__main__":
-    uvicorn.run(elf, host=HOST, port=int(UVICORN_PORT))

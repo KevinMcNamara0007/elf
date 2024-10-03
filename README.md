@@ -41,7 +41,7 @@
 
 
 ## To Start Locally from source (MAC and Linux)
-sudo uvicorn src.asgi:elf --reload --host=127.0.0.1 --port==8080
+sudo uvicorn src.asgi:elf --reload --host=127.0.0.1 --port==8080 --env-file confg/.env-dev
 
 ## Running from Image (Locally or Cloud)
 ### Options
