@@ -16,6 +16,7 @@ from src.controllers import inference, crud
 from src.utilities.exception_handlers import request_validation_exception_handler, http_exception_handler, \
     unhandled_exception_handler
 from log_management.middleware import log_request_middleware, CacheRequestBodyMiddleware
+from fastapi.staticfiles import StaticFiles
 
 
 @asynccontextmanager
@@ -40,6 +41,7 @@ elf = FastAPI(
 # Include Routers
 elf.include_router(inference.inference_router)
 elf.include_router(crud.crud_router)
+elf.mount("/home", StaticFiles(directory="static", html=True), name="static")
 
 # CORS Fixes
 elf.add_middleware(

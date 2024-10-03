@@ -1,5 +1,7 @@
 import json
 import math
+import time
+
 from src.utilities.general import classifications, INPUT_WINDOW
 from src.utilities.inference import fetch_llama_cpp_response, classify_prompt, fetch_llama_cpp_response_stream, \
     fetch_pro, fetch_pro_stream
@@ -93,9 +95,25 @@ async def get_pro_response_stream(prompt, output_tokens):
     Fetches response from llama-server and recalls if generation is truncated. Returns the full response.
     """
     key = await classify_prompt(prompt)
-    async for chunk in fetch_pro_stream(prompt=prompt,output_tokens=output_tokens, key=key):
+    prompt1 = (f"Instructions: "
+                  f"1. For the following user ask {prompt} you will clarify the ask."
+                  f"2. List the requirements and steps needed to complete this task fully.")
+    response1 = ""
+    async for chunk in fetch_pro_stream(prompt=prompt1,output_tokens=output_tokens, key=key):
         arr = chunk.split(': ', 1)[1]
         data_dict = json.loads(arr)
         content = data_dict.get('content')
+        response1 += content
         yield content
-
+    prompt2 = ("Instructions:"
+               f"1. Fulfill the requirements listed by producing a response fulfilling all of them: {response1}"
+               )
+    response2 = ""
+    yield "\n!Final!\n"
+    time.sleep(3)
+    async for chunk in fetch_pro_stream(prompt=prompt2,output_tokens=output_tokens, key=key):
+        arr = chunk.split(': ', 1)[1]
+        data_dict = json.loads(arr)
+        content = data_dict.get('content')
+        response2 += content
+        yield content
