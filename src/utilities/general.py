@@ -20,9 +20,9 @@ API_TOKENS = API_TOKENS.split(",")
 CHROMA_DATA_PATH = os.getenv("CHROMA_DATA_PATH")
 CHROMA_PORT = int(os.getenv("CHROMA_PORT", "8099"))
 
-chroma_manager = None
-llama_manager = None
-classifier_manager = None
+chroma_manager = ChromaServerManager()
+llama_manager = LlamaServerManager()
+classifier_manager = ClassifierManager()
 
 # CNN classes:
 classifications = ['code', 'general', 'math']
@@ -77,16 +77,13 @@ async def start_aux_servers():
     Returns the initialized server managers.
     """
     global chroma_manager, llama_manager, classifier_manager
-    chroma_manager = ChromaServerManager()
-    llama_manager = LlamaServerManager()
-    classifier_manager = ClassifierManager()
 
     # Spin up the servers
     await llama_manager.spin_up_servers()
     classifier_manager.start_classifier()
 
-    # Check health for ChromaDB server
-    chroma_manager.start_chroma_db()
+    # # Check health for ChromaDB server
+    # chroma_manager.start_chroma_db()
 
 
 def stop_aux_servers():

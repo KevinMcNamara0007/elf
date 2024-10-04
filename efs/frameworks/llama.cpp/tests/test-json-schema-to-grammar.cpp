@@ -2,13 +2,14 @@
 #undef NDEBUG
 #endif
 
+#include "json-schema-to-grammar.h"
+
+#include "llama-grammar.h"
+
 #include <cassert>
 #include <fstream>
 #include <sstream>
 #include <regex>
-
-#include "json-schema-to-grammar.h"
-#include "grammar-parser.h"
 
 static std::string trim(const std::string & source) {
     std::string s(source);
@@ -40,7 +41,8 @@ struct TestCase {
     }
     void verify_expectation_parseable() const {
         try {
-            auto state = grammar_parser::parse(expected_grammar.c_str());
+            llama_grammar_parser state;
+            state.parse(expected_grammar.c_str());
             if (state.symbol_ids.find("root") == state.symbol_ids.end()) {
                 throw std::runtime_error("Grammar failed to parse:\n" + expected_grammar);
             }
@@ -1239,26 +1241,30 @@ int main() {
         }
     });
 
-    if (getenv("LLAMA_PYTHON_AVAILABLE") || (std::system("python -c \"import sys; exit(1) if sys.version_info < (3, 8) else print('Python version is sufficient')\"") == 0)) {
-        test_all("Python", [](const TestCase & tc) {
-            write("test-json-schema-input.tmp", tc.schema);
-            tc.verify_status(std::system(
-                "python ./examples/json_schema_to_grammar.py test-json-schema-input.tmp > test-grammar-output.tmp") == 0 ? SUCCESS : FAILURE);
-            tc.verify(read("test-grammar-output.tmp"));
-        });
+    if (getenv("LLAMA_SKIP_TESTS_SLOW_ON_EMULATOR")) {
+        fprintf(stderr, "\033[33mWARNING: Skipping slow tests on emulator.\n\033[0m");
     } else {
-        fprintf(stderr, "\033[33mWARNING: Python not found (min version required is 3.8), skipping Python JSON schema -> grammar tests.\n\033[0m");
-    }
+        if (getenv("LLAMA_PYTHON_AVAILABLE") || (std::system("python -c \"import sys; exit(1) if sys.version_info < (3, 8) else print('Python version is sufficient')\"") == 0)) {
+            test_all("Python", [](const TestCase & tc) {
+                write("test-json-schema-input.tmp", tc.schema);
+                tc.verify_status(std::system(
+                    "python ./examples/json_schema_to_grammar.py test-json-schema-input.tmp > test-grammar-output.tmp") == 0 ? SUCCESS : FAILURE);
+                tc.verify(read("test-grammar-output.tmp"));
+            });
+        } else {
+            fprintf(stderr, "\033[33mWARNING: Python not found (min version required is 3.8), skipping Python JSON schema -> grammar tests.\n\033[0m");
+        }
 
-    if (getenv("LLAMA_NODE_AVAILABLE") || (std::system("node --version") == 0)) {
-        test_all("JavaScript", [](const TestCase & tc) {
-            write("test-json-schema-input.tmp", tc.schema);
-            tc.verify_status(std::system(
-                "node ./tests/run-json-schema-to-grammar.mjs test-json-schema-input.tmp > test-grammar-output.tmp") == 0 ? SUCCESS : FAILURE);
-            tc.verify(read("test-grammar-output.tmp"));
-        });
-    } else {
-        fprintf(stderr, "\033[33mWARNING: Node not found, skipping JavaScript JSON schema -> grammar tests.\n\033[0m");
+        if (getenv("LLAMA_NODE_AVAILABLE") || (std::system("node --version") == 0)) {
+            test_all("JavaScript", [](const TestCase & tc) {
+                write("test-json-schema-input.tmp", tc.schema);
+                tc.verify_status(std::system(
+                    "node ./tests/run-json-schema-to-grammar.mjs test-json-schema-input.tmp > test-grammar-output.tmp") == 0 ? SUCCESS : FAILURE);
+                tc.verify(read("test-grammar-output.tmp"));
+            });
+        } else {
+            fprintf(stderr, "\033[33mWARNING: Node not found, skipping JavaScript JSON schema -> grammar tests.\n\033[0m");
+        }
     }
 
     test_all("Check Expectations Validity", [](const TestCase & tc) {

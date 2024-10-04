@@ -78,6 +78,7 @@ class LlamaServerManager:
             "--host", HOST,
             "--port", str(port),
             "--model", GENERAL_MODEL_PATH,
+            "--ctx-size", "16000",
             "--repeat-last-n", "0",
             "--gpu-layers", gpu_layers_per_server,
             "--threads", threads_per_server,
@@ -165,6 +166,7 @@ class LlamaServerManager:
         Calls the active llama-server at the /completion endpoint and increments the call count.
         If the server exceeds the max call count, it triggers a server switch asynchronously without blocking the response.
         """
+        print(payload)
         # Determine the current active server
         with self.lock:
             active_port = self.ports[self.current_server_index]
@@ -175,11 +177,12 @@ class LlamaServerManager:
         url = f"http://localhost:{active_port}/completion"
 
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=75) as client:
                 # Send the POST request to the /completion endpoint
                 response = await client.post(url, json=payload)
                 response.raise_for_status()  # Raise an error for bad responses
                 result = response.json()
+                print(result)
 
             # Check if the max call count is exceeded
             if call_count >= MAX_CALLS:

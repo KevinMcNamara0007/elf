@@ -6,7 +6,7 @@ from src.utilities.inference import classify_prompt
 
 CHATML_TEMPLATE = os.getenv("CHATML_TEMPLATE")
 LLAMA3_TEMPLATE = os.getenv("LLAMA3_TEMPLATE")
-CHAT_TEMPLATE = LLAMA3_TEMPLATE if "LLAMA" in os.getenv("general") else CHATML_TEMPLATE
+CHAT_TEMPLATE = LLAMA3_TEMPLATE if "llama" in os.getenv("general").lower() else CHATML_TEMPLATE
 
 
 STOP_SYMBOLS = []
@@ -63,10 +63,12 @@ async def get_expert_response(
     response = await llama_manager.call_llama_server(
         {
             "system_prompt": f"<|im_start|>system\n{rules}<|im_end|>" if CHAT_TEMPLATE == CHATML_TEMPLATE else rules,
-            "messages": convert_to_chat_template(messages, CHAT_TEMPLATE),
+            "prompt": convert_to_chat_template(messages, CHAT_TEMPLATE),
+            "stop": STOP_SYMBOLS,
             "temperature": temperature,
             "top_p": top_p,
-            "top_k": top_k
+            "top_k": top_k,
+            "stream": False
         }
     )
     return llama_response_formatter(response)
