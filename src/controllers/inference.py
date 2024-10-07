@@ -43,14 +43,14 @@ async def ask_an_expert(
     return await get_expert_response(
         rules=request.rules,  # optional the role the LLM should play.
         messages=history,  # optional must be formatted "[{"role": "system", "content": "system prompt"}]"
-        temperature=request.temperature, # optional temperature of the LLM
+        temperature=request.temperature,  # optional temperature of the LLM
         top_k=request.top_k,  # optional Number of words to consider for next token
         top_p=request.top_p,  # optional Percentage to limit next token generation to
     )
 
 
 @inference_router.post("/ask_an_expert_stream", status_code=status.HTTP_200_OK, description="Ask any question.")
-async def ask_an_expert(
+async def ask_an_expert_stream(
         token: str = Header(default=NO_TOKEN, convert_underscores=False),
         request: AskExpertRequest = Body(...)
 ):
@@ -94,7 +94,6 @@ async def ask_a_pro(
     if request.prompt:
         return await get_pro_response(
             prompt=request.prompt,  # optional the role the LLM should play.
-            output_tokens = request.output_tokens
         )
     else:
         raise HTTPException(status_code=400, detail="Provide a prompt")

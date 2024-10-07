@@ -38,7 +38,7 @@ class Message(BaseModel):
 
 
 class AskExpertRequest(BaseModel):
-    temperature: float = 0.05
+    temperature: float = 0.8
     rules: str = "You are a virtual assistant."
     top_k: int = 40
     top_p: float = .95
