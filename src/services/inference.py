@@ -45,12 +45,12 @@ async def get_expert_response(rules, messages, temperature=0.8, top_k=40, top_p=
     prompt = convert_to_chat_template(rules, messages, CHAT_TEMPLATE)
     response = await llama_manager.call_llama_server({
         "prompt": prompt,
+        "n_predict": -1,
         "stop": STOP_SYMBOLS,
         "temperature": temperature,
         "top_p": top_p,
         "top_k": top_k,
         "stream": False,
-        "cache_prompt": False
     })
 
     return llama_response_formatter(response)
