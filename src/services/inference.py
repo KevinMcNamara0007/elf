@@ -1,3 +1,4 @@
+from datetime import datetime
 import os
 from src.utilities.general import llama_manager, classifications
 from src.utilities.inference import classify_prompt
@@ -10,15 +11,14 @@ CHAT_TEMPLATE = LLAMA3_TEMPLATE if "llama" in os.getenv("general").lower() else 
 STOP_SYMBOLS = [
     "</s>", "Llama:", "User:", "<|end|>", "<|eot_id|>", "<|end_of_text|>",
     "<|eom_id|>", "<|im_end|>", "<|EOT|>", "<|END_OF_TURN_TOKEN|>",
-    "<|end_of_turn|>", "<|endoftext|>", "assistant", "user", "###"
+    "<|end_of_turn|>", "<|endoftext|>", "assistant", "user", "<|end_header_id|>"
 ]
 
 
 # Template constructors for chat formatting
 def format_llama3(messages):
     return "\n".join(
-        f"{'Llama' if 'user' not in message.role.lower() else 'User'}: {message.content}"
-        for message in messages
+        f"{'<|start_header_id|>assistant<|end_header_id|>' if 'user' not in message.role.lower() else '<|start_header_id|>user<|end_header_id|>'}\n\n{message.content}<|eot_id|>\n" for message in messages
     )
 
 
@@ -32,7 +32,9 @@ def format_chatml(messages):
 def convert_to_chat_template(rules, messages, template=CHAT_TEMPLATE):
     if template == CHATML_TEMPLATE:
         return f"<|im_start|>system\n{rules}<|im_end|>\n{format_chatml(messages)}\nassistant"
-    return rules + format_llama3(messages) + "\nLlama:"
+    return (f'<|start_header_id|>system<|end_header_id|>'
+            f"Today is {datetime.today().strftime('%Y-%m-%d')}{rules}<|eot_id|>\n") + format_llama3(
+        messages) + "\n<|start_header_id|>assistant<|end_header_id|>"
 
 
 # Core method for fetching a response from the server
