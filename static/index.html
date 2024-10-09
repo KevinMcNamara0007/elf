@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>CoT</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    <script src="script.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="menu">
+            <div class=""><h3>Genius Framework</h3></div>
+        </div>
+        <div class="responseContainer">
+            <div class="response">
+                <button class="thinkButton">Thinking</button>
+                <div id="plan">
+
+                </div>
+                <div id="response">
+
+                </div>
+            </div>
+        </div>
+        <div class="promptContainer">
+            <label>
+                <input id="instruction" type="text" title="instruction" placeholder="Enter your instructions here"/>
+            </label>
+            <button class="searchImage" onclick="handleSubmit()"><img alt="search" src="./images/arrowIcon.svg"/></button>
+        </div>
+    </div>
+</body>
+</html>
