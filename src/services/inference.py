@@ -1,5 +1,10 @@
+import json
+import time
 from datetime import datetime
 import os
+
+import requests
+
 from src.utilities.general import llama_manager, classifications
 from src.utilities.inference import classify_prompt
 
@@ -100,6 +105,75 @@ async def get_pro_response(prompt):
     })
 
     return llama_response_formatter(response)
+
+
+async def get_pro_response_stream(prompt, output_tokens):
+    """
+    Fetches response from llama-server and recalls if generation is truncated. Returns the full response.
+    """
+    key = await classify_prompt(prompt)
+    prompt1 = (f"Instructions: "
+               f"1. For the following user ask {prompt} you will clarify the ask."
+               f"2. List the requirements and steps needed to complete this task fully.")
+    response1 = ""
+    async for chunk in fetch_pro_stream(prompt=prompt1,output_tokens=output_tokens, key=key):
+        arr = chunk.split(': ', 1)[1]
+        data_dict = json.loads(arr)
+        content = data_dict.get('content')
+        response1 += content
+        yield content
+    prompt2 = ("Instructions:"
+               f"1. Fulfill the requirements listed by producing a response that accomplishes all of them: {response1}"
+               )
+    response2 = ""
+    yield "\n!Final!\n"
+    time.sleep(3)
+    async for chunk in fetch_pro_stream(prompt=prompt2,output_tokens=output_tokens, key=key):
+        arr = chunk.split(': ', 1)[1]
+        data_dict = json.loads(arr)
+        content = data_dict.get('content')
+        response2 += content
+        yield content
+
+
+async def fetch_pro_stream(prompt, output_tokens, key):
+    llama = f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>{prompt}<|start_header_id|>user<|end_header_id|><|eot_id|>assistant"
+    payload = {
+        "prompt": llama,
+        "stream": True,  # Enable streaming
+        "temperature": 0.8,
+        "stop": ["</s>", "<|end|>", "<|eot_id|>", "<|end_of_text|>", "<|im_end|>", "<|EOT|>",
+                 "<|END_OF_TURN_TOKEN|>", "<|end_of_turn|>", "<|endoftext|>", "assistant", "user"],
+        "repeat_last_n": 0,
+        "repeat_penalty": 1,
+        "penalize_nl": False,
+        "top_k": 0,
+        "top_p": 1,
+        "min_p": 0.05,
+        "tfs_z": 1,
+        "typical_p": 1,
+        "presence_penalty": 0,
+        "frequency_penalty": 0,
+        "mirostat": 0,
+        "mirostat_tau": 5,
+        "mirostat_eta": 0.1,
+        "grammar": "",
+        "n_probs": 0,
+        "min_keep": 0,
+        "image_data": [],
+        "cache_prompt": False,
+        "api_key": ""
+    }
+    expert_url = f"http://127.0.0.1:8001/completion"
+    response = requests.post(
+        expert_url,
+        json=payload,
+        stream=True
+    )
+    response.raise_for_status()
+    for chunk in response.iter_lines():
+        if chunk:
+            yield chunk.decode('utf-8')
 
 
 # Stream expert response
