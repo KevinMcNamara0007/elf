@@ -75,7 +75,7 @@ def llama_response_formatter(response):
             'completion_tokens': completion_tokens,
         },
         'choices': [{
-            'message': {'content': response['content']},
+            'message': {'content': response['content'].replace("<|end_header_id|>", "")},
             'finish_reason': 'length' if response.get('stopped_limit') else 'stop',
         }],
         'timings': response['timings']
@@ -86,24 +86,32 @@ def llama_response_formatter(response):
 async def get_pro_response(prompt):
     key = await classify_prompt(prompt)
     print(f"Classification: {classifications[key]}")
-
-    llama_prompt = f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>{prompt}<|start_header_id|>user<|end_header_id|><|eot_id|>assistant"
+    llama_prompt = f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{prompt}<|start_header_id|>user<|end_header_id|>\n\n<|eot_id|>assistant"
     response = await llama_manager.call_llama_server({
         "prompt": llama_prompt,
-        "stop": STOP_SYMBOLS,
+        "stream": False,
         "temperature": 0.8,
-        "n_predict": -1,
-        "top_k": 0,
-        "top_p": 1,
+        "stop": ["</s>", "<|end|>", "<|eot_id|>", "<|end_of_text|>", "<|im_end|>", "<|EOT|>", "<|END_OF_TURN_TOKEN|>", "<|end_of_turn|>", "<|endoftext|>", "assistant", "user"],
         "repeat_last_n": 0,
         "repeat_penalty": 1,
         "penalize_nl": False,
+        "top_k": 0,
+        "top_p": 1,
+        "min_p": 0.05,
+        "tfs_z": 1,
+        "typical_p": 1,
         "presence_penalty": 0,
         "frequency_penalty": 0,
         "mirostat": 0,
-        "cache_prompt": False
+        "mirostat_tau": 5,
+        "mirostat_eta": 0.1,
+        "grammar": "",
+        "n_probs": 0,
+        "min_keep": 0,
+        "image_data": [],
+        "cache_prompt": False,
+        "api_key": "",
     })
-
     return llama_response_formatter(response)
 
 
