@@ -325,6 +325,64 @@ class LlamaServerManager:
 
         return result
 
+    async def call_llama_server_stream(self, payload):
+        """
+        Call the active llama-server with the specified payload.
+        Supports streaming responses by setting payload['stream'] to True.
+        Yields chunks if streaming, otherwise yields the full result.
+        """
+        result = {"error": "No response from server"}
+        max_retries = 3  # Set the maximum number of retries
+        retry_count = 0
+
+        while retry_count < max_retries:
+            with self.lock:
+                active_port = self.ports[self.current_server_index]
+
+                if self.switch_in_progress:
+                    print("Switch in progress, but continuing with the current active server.")
+                else:
+                    if self.server_calls[self.current_server_index] >= MAX_CALLS and self.active_requests == 0:
+                        print(f"Server {self.current_server_index + 1} reached max calls. Preparing to switch...")
+                        self.switch_in_progress = True
+                        asyncio.create_task(self.switch_to_standby())
+
+                    self.server_calls[self.current_server_index] += 1
+                    self.active_requests += 1
+
+            try:
+                async with httpx.AsyncClient(timeout=75, follow_redirects=True) as client:
+                    url = f"http://localhost:{active_port}/completion"
+                    response = await client.post(url, json=payload)
+                    async for chunk in response.aiter_text():
+                        if chunk:
+                            yield chunk
+                    break  # Exit the loop after streaming
+
+            except httpx.ReadError as e:
+                print(f"ReadError occurred: {e}")
+                result = {"error": f"ReadError occurred during the request: {e}"}
+                await self.wait_for_switch_completion()
+                retry_count += 1
+
+            except httpx.HTTPStatusError as e:
+                print(f"HTTP error during request: {e}")
+                result = {"error": f"Failed to get a valid response from the server: {e}"}
+                retry_count += 1
+
+            finally:
+                with self.lock:
+                    self.active_requests -= 1
+
+                    if self.server_calls[self.current_server_index] >= MAX_CALLS and self.active_requests == 0:
+                        if not self.switch_in_progress:
+                            print("All requests finished, switching servers.")
+                            asyncio.create_task(self.switch_to_standby())
+
+        if retry_count == max_retries:
+            print("Max retries reached, returning error result.")
+            yield result
+
     async def wait_for_switch_completion(self):
         """
         Waits for the standby server to become active during the server switch process.

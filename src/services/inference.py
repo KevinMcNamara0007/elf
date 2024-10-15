@@ -2,10 +2,7 @@ import json
 import time
 from datetime import datetime
 import os
-
-import requests
-
-from src.utilities.general import llama_manager, classifications
+from src.utilities.general import llama_manager, classifications, STREAM_PAYLOAD
 from src.utilities.inference import classify_prompt
 
 # Load environment variables
@@ -23,7 +20,8 @@ STOP_SYMBOLS = [
 # Template constructors for chat formatting
 def format_llama3(messages):
     return "\n".join(
-        f"{'<|start_header_id|>assistant<|end_header_id|>' if 'user' not in message.role.lower() else '<|start_header_id|>user<|end_header_id|>'}\n\n{message.content}<|eot_id|>\n" for message in messages
+        f"{'<|start_header_id|>assistant<|end_header_id|>' if 'user' not in message.role.lower() else '<|start_header_id|>user<|end_header_id|>'}\n\n{message.content}<|eot_id|>\n"
+        for message in messages
     )
 
 
@@ -58,6 +56,9 @@ async def get_expert_response(rules, messages, temperature=0.8, top_k=40, top_p=
         "top_p": top_p,
         "top_k": top_k,
         "stream": False,
+        "penalize_nl": True,
+        "repeat_last_n": 0,
+        "min_keep": 0
     })
 
     return llama_response_formatter(response)
@@ -86,15 +87,15 @@ def llama_response_formatter(response):
 async def get_pro_response(prompt):
     key = await classify_prompt(prompt)
     print(f"Classification: {classifications[key]}")
-    llama_prompt = f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{prompt}<|start_header_id|>user<|end_header_id|>\n\n<|eot_id|>assistant"
+    llama_prompt = f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{prompt}<|start_header_id|>user<|end_header_id|>\n\n<|eot_id|><|start_header_id|>assistant<|end_header_id|>"
     response = await llama_manager.call_llama_server({
         "prompt": llama_prompt,
         "stream": False,
         "temperature": 0.8,
-        "stop": ["</s>", "<|end|>", "<|eot_id|>", "<|end_of_text|>", "<|im_end|>", "<|EOT|>", "<|END_OF_TURN_TOKEN|>", "<|end_of_turn|>", "<|endoftext|>", "assistant", "user"],
+        "stop": STOP_SYMBOLS,
         "repeat_last_n": 0,
         "repeat_penalty": 1,
-        "penalize_nl": False,
+        "penalize_nl": True,
         "top_k": 0,
         "top_p": 1,
         "min_p": 0.05,
@@ -115,73 +116,39 @@ async def get_pro_response(prompt):
     return llama_response_formatter(response)
 
 
-async def get_pro_response_stream(prompt, output_tokens):
+async def get_pro_response_stream(prompt):
     """
     Fetches response from llama-server and recalls if generation is truncated. Returns the full response.
     """
     key = await classify_prompt(prompt)
-    prompt1 = (f"Instructions: "
-               f"1. For the following user ask {prompt} you will clarify the ask."
-               f"2. List the requirements and steps needed to complete this task fully.")
+    print(f"Classification: {classifications[key]}")
+    payload = STREAM_PAYLOAD
     response1 = ""
-    async for chunk in fetch_pro_stream(prompt=prompt1,output_tokens=output_tokens, key=key):
+    payload.update(
+        {"prompt": (f"Instructions: "
+                    f"1. For the following user ask {prompt} you will clarify the ask."
+                    f"2. List the requirements and steps needed to complete this task fully.")},
+        {"stop": STOP_SYMBOLS}
+    )
+    async for chunk in llama_manager.call_llama_server_stream(payload):
         arr = chunk.split(': ', 1)[1]
         data_dict = json.loads(arr)
         content = data_dict.get('content')
         response1 += content
         yield content
-    prompt2 = ("Instructions:"
-               f"1. Fulfill the requirements listed by producing a response that accomplishes all of them: {response1}"
-               )
+    payload.update(
+        {"prompt": ("Instructions:"
+                    f"1. Fulfill the requirements listed by producing a response that accomplishes all of them: {response1}"
+                    )}
+    )
     response2 = ""
     yield "\n!Final!\n"
-    time.sleep(3)
-    async for chunk in fetch_pro_stream(prompt=prompt2,output_tokens=output_tokens, key=key):
+    async for chunk in llama_manager.call_llama_server_stream(payload):
         arr = chunk.split(': ', 1)[1]
         data_dict = json.loads(arr)
         content = data_dict.get('content')
         response2 += content
         yield content
-
-
-async def fetch_pro_stream(prompt, output_tokens, key):
-    llama = f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>{prompt}<|start_header_id|>user<|end_header_id|><|eot_id|>assistant"
-    payload = {
-        "prompt": llama,
-        "stream": True,  # Enable streaming
-        "temperature": 0.8,
-        "stop": ["</s>", "<|end|>", "<|eot_id|>", "<|end_of_text|>", "<|im_end|>", "<|EOT|>",
-                 "<|END_OF_TURN_TOKEN|>", "<|end_of_turn|>", "<|endoftext|>", "assistant", "user"],
-        "repeat_last_n": 0,
-        "repeat_penalty": 1,
-        "penalize_nl": False,
-        "top_k": 0,
-        "top_p": 1,
-        "min_p": 0.05,
-        "tfs_z": 1,
-        "typical_p": 1,
-        "presence_penalty": 0,
-        "frequency_penalty": 0,
-        "mirostat": 0,
-        "mirostat_tau": 5,
-        "mirostat_eta": 0.1,
-        "grammar": "",
-        "n_probs": 0,
-        "min_keep": 0,
-        "image_data": [],
-        "cache_prompt": False,
-        "api_key": ""
-    }
-    expert_url = f"http://127.0.0.1:8001/completion"
-    response = requests.post(
-        expert_url,
-        json=payload,
-        stream=True
-    )
-    response.raise_for_status()
-    for chunk in response.iter_lines():
-        if chunk:
-            yield chunk.decode('utf-8')
 
 
 # Stream expert response
@@ -190,15 +157,17 @@ async def get_expert_response_stream(rules, messages, temperature=0.05, top_k=40
     print(f"Classification: {classifications[key]}")
 
     payload = {
-        "rules": rules,
-        "messages": messages,
+        "prompt": convert_to_chat_template(rules, messages),
         "temperature": temperature,
+        "n_predict": -1,
         "top_k": top_k,
         "top_p": top_p,
         "key": key,
         "stream": True,
+        "penalize_nl": True,
+        "repeat_last_n": 0,
+        "min_keep": 0
     }
-
     async for chunk in llama_manager.call_llama_server_stream(payload):
         yield chunk  # Stream output chunk by chunk
 

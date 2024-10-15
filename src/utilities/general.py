@@ -27,9 +27,31 @@ classifier_manager = ClassifierManager()
 # CNN classes:
 classifications = ['code', 'general', 'math']
 
+STREAM_PAYLOAD = {
+    "stream": True,  # Enable streaming
+    "temperature": 0.8,
+    "repeat_last_n": 0,
+    "repeat_penalty": 1,
+    "penalize_nl": True,
+    "top_k": 0,
+    "top_p": 1,
+    "min_p": 0.05,
+    "tfs_z": 1,
+    "typical_p": 1,
+    "presence_penalty": 0,
+    "frequency_penalty": 0,
+    "mirostat": 0,
+    "mirostat_tau": 5,
+    "mirostat_eta": 0.1,
+    "grammar": "",
+    "n_probs": 0,
+    "min_keep": 0,
+    "image_data": [],
+    "cache_prompt": False,
+    "api_key": ""}
+
 
 # General Helper Functions
-
 def kill_process_on_port(port):
     """
     Kills a process on a given port.
