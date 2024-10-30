@@ -64,6 +64,74 @@ async def get_expert_response(rules, messages, temperature=0.8, top_k=40, top_p=
     return llama_response_formatter(response)
 
 
+async def generate_chain_of_thought(messages, temperature=0.8, top_k=40, top_p=0.95):
+    key = await classify_prompt(messages[-1].content)
+    print(f"Classification: {classifications[key]}")
+    thought_1_prompt = convert_to_chat_template(
+        "Can you break down the following instructions into a small set of steps that would lead us to a "
+        "satisfactory response? Please return only a comma seperated list of rules.",
+        messages,
+        CHAT_TEMPLATE
+    )
+    thought_1_steps = await llama_manager.call_llama_server({
+        "prompt": thought_1_prompt,
+        "n_predict": -1,
+        "stop": STOP_SYMBOLS,
+        "temperature": temperature,
+        "top_k": top_k,
+        "top_p": top_p,
+        "stream": False,
+        "penalize_nl": True,
+        "repeat_last_n": 0,
+        "min_keep": 0
+    })
+
+    yield thought_1_steps
+
+    thought_2_prompt = convert_to_chat_template(
+        rules="Could you please follow the steps and complete the request.",
+        messages=thought_1_steps["response"],
+    )
+
+    thought_2_initial_attempt = await llama_manager.call_llama_server({
+        "prompt": thought_2_prompt,
+        "n_predict": -1,
+        "stop": STOP_SYMBOLS,
+        "temperature": temperature,
+        "top_k": top_k,
+        "top_p": top_p,
+        "stream": False,
+        "penalize_nl": True,
+        "repeat_last_n": 0,
+        "min_keep": 0
+    })
+
+    yield thought_2_initial_attempt
+
+    thought_3_prompt = convert_to_chat_template(
+        rules=f"Could you please make sure the following is an actual solution to the prompt? If so, please clean up "
+              f"the solution to make it easier to understand, if not, please correct the solution so that it answers "
+              f"the prompt. In either case please format your response as if it were your own knowledge. Here is the "
+              f"original prompt: {messages}.",
+        messages=thought_2_initial_attempt["response"],
+    )
+
+    thought_3_final_attempt = await llama_manager.call_llama_server({
+        "prompt": thought_3_prompt,
+        "n_predict": -1,
+        "stop": STOP_SYMBOLS,
+        "temperature": temperature,
+        "top_k": top_k,
+        "top_p": top_p,
+        "stream": False,
+        "penalize_nl": True,
+        "repeat_last_n": 0,
+        "min_keep": 0
+    })
+
+    yield llama_response_formatter(thought_3_final_attempt["response"])
+
+
 # General response formatter
 def llama_response_formatter(response):
     prompt_tokens = int(response['tokens_evaluated'])
