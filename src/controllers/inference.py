@@ -95,10 +95,9 @@ async def ask_a_pro_stream(
     if request.prompt:
         return StreamingResponse(
             get_pro_response_stream(
-                prompt=request.prompt,  # optional the role the LLM should play.
-                output_tokens=request.output_tokens
+                prompt=request.prompt  # optional role for the LLM.
             ),
-            media_type="text_plain"
+            media_type="text/plain"
         )
     else:
         raise HTTPException(status_code=400, detail="Provide a prompt")

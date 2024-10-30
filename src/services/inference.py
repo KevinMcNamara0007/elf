@@ -118,37 +118,51 @@ async def get_pro_response(prompt):
 
 async def get_pro_response_stream(prompt):
     """
-    Fetches response from llama-server and recalls if generation is truncated. Returns the full response.
+    Fetches response from llama-server in chunks, handling truncation and yielding a final output response.
     """
     key = await classify_prompt(prompt)
     print(f"Classification: {classifications[key]}")
     payload = STREAM_PAYLOAD
     response1 = ""
+    prompt1 = (f"Instructions: 1. For the following user ask '{prompt}', clarify the ask. "
+               f"2. List the requirements and steps needed to complete the ask fully.")
+    llama_prompt1 = f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{prompt1}<|start_header_id|>user<|end_header_id|>\n\n<|eot_id|><|start_header_id|>assistant<|end_header_id|>"
+    # Initial response for clarification
     payload.update(
-        {"prompt": (f"Instructions: "
-                    f"1. For the following user ask {prompt} you will clarify the ask."
-                    f"2. List the requirements and steps needed to complete this task fully.")},
-        {"stop": STOP_SYMBOLS}
+        {"prompt": llama_prompt1}
     )
+    payload.update({"stop": STOP_SYMBOLS})
+
+    # Stream the initial clarification response
     async for chunk in llama_manager.call_llama_server_stream(payload):
-        arr = chunk.split(': ', 1)[1]
-        data_dict = json.loads(arr)
-        content = data_dict.get('content')
-        response1 += content
-        yield content
+        try:
+            arr = chunk.split(': ', 1)[1]
+            data_dict = json.loads(arr)
+            content = data_dict.get('content')
+            response1 += content
+            print(content)
+            yield content
+        except (json.JSONDecodeError, IndexError):
+            print("Failed to parse chunk:", chunk)
+    # Update payload for final response after clarification
+    prompt2 = (f"Instructions: 1. Produce a final soluton based on the requirements given without explaination. Requirements: {response1}. ")
+    llama_prompt2 = f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{prompt2}<|start_header_id|>user<|end_header_id|>\n\n<|eot_id|><|start_header_id|>assistant<|end_header_id|>"
     payload.update(
-        {"prompt": ("Instructions:"
-                    f"1. Fulfill the requirements listed by producing a response that accomplishes all of them: {response1}"
-                    )}
+        {"prompt": llama_prompt2}
     )
-    response2 = ""
+
+    # Indicate end of clarification and start of final response
     yield "\n!Final!\n"
+
+    # Stream the final response content
     async for chunk in llama_manager.call_llama_server_stream(payload):
-        arr = chunk.split(': ', 1)[1]
-        data_dict = json.loads(arr)
-        content = data_dict.get('content')
-        response2 += content
-        yield content
+        try:
+            arr = chunk.split(': ', 1)[1]
+            data_dict = json.loads(arr)
+            content = data_dict.get('content')
+            yield content
+        except (json.JSONDecodeError, IndexError):
+            print("Failed to parse chunk:", chunk)
 
 
 # Stream expert response

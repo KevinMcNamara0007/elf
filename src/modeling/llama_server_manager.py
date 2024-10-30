@@ -353,11 +353,11 @@ class LlamaServerManager:
             try:
                 async with httpx.AsyncClient(timeout=75, follow_redirects=True) as client:
                     url = f"http://localhost:{active_port}/completion"
-                    response = await client.post(url, json=payload)
-                    async for chunk in response.aiter_text():
-                        if chunk:
-                            yield chunk
-                    break  # Exit the loop after streaming
+                    async with client.stream(method="POST", url=url, json=payload) as response:
+                        async for chunk in response.aiter_text():
+                            if chunk:
+                                yield chunk
+                        break
 
             except httpx.ReadError as e:
                 print(f"ReadError occurred: {e}")
