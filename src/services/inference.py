@@ -1,5 +1,5 @@
 import json
-import time
+import re
 from datetime import datetime
 import os
 from src.utilities.general import llama_manager, classifications, STREAM_PAYLOAD
@@ -22,14 +22,14 @@ def format_llama3(messages):
     return "\n".join(
         f"{'<|start_header_id|>assistant<|end_header_id|>' if 'user' not in message.role.lower() else '<|start_header_id|>user<|end_header_id|>'}\n\n{message.content}<|eot_id|>\n"
         for message in messages
-    )
+    ) if type(messages) == list else f"<|start_header_id|>user<|end_header_id|>\n{messages}<|eot_id|>\n"
 
 
 def format_chatml(messages):
     return "\n".join(
         f"<|im_start|>{'assistant' if 'user' not in message.role.lower() else 'user'}\n{message.content}<|im_end|>"
         for message in messages
-    )
+    ) if type(messages) == list else f"<|im_start|>user\n{messages}<|im_end|>"
 
 
 def convert_to_chat_template(rules, messages, template=CHAT_TEMPLATE):
@@ -145,7 +145,8 @@ async def get_pro_response_stream(prompt):
         except (json.JSONDecodeError, IndexError):
             print("Failed to parse chunk:", chunk)
     # Update payload for final response after clarification
-    prompt2 = (f"Instructions: 1. Produce a final soluton based on the requirements given without explaination. Requirements: {response1}. ")
+    prompt2 = (
+        f"Instructions: 1. Produce a final soluton based on the requirements given without explaination. Requirements: {response1}. ")
     llama_prompt2 = f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{prompt2}<|start_header_id|>user<|end_header_id|>\n\n<|eot_id|><|start_header_id|>assistant<|end_header_id|>"
     payload.update(
         {"prompt": llama_prompt2}
@@ -184,6 +185,55 @@ async def get_expert_response_stream(rules, messages, temperature=0.05, top_k=40
     }
     async for chunk in llama_manager.call_llama_server_stream(payload):
         yield chunk  # Stream output chunk by chunk
+
+
+async def tool_selection(api_doc, user_query):
+    rules = (
+        "Please read the following query and select which API is required to satisfy "
+        "the user request. Please do not assume anything and use only the information provided to respond.\n"
+        f"Here are the available tools: {api_doc}\n"
+        "Please respond as in the following JSON format:\n"
+        "{\n"
+        "  \"<Needed_Tool_Name_1>\": {\n"
+        "    \"Params\": [\"<param_1_data>\", \"<param_2_data>\"]\n"
+        "    \"Missing_Params\": [\"<missing_param_1>\", \"<missing_param_2>\"] (include this key only if there are missing parameters)\n"
+        "  },\n"
+        "  \"<Needed_Tool_Name_2>\": {\n"
+        "    \"Params\": []\n"
+        "    \"Missing_Params\": [] (include only if there are missing parameters)\n"
+        "  }\n"
+        "}\n"
+        "If no tools are required to answer the query, return an empty JSON object: {}"
+    )
+
+    payload = {
+        "prompt": convert_to_chat_template(rules, user_query),
+        "temperature": 0.05,
+        "n_predict": -1,
+        "top_k": 40,
+        "top_p": 0.9,
+        "stream": False,
+        "penalize_nl": True,
+        "repeat_last_n": 0,
+        "min_keep": 0
+    }
+
+    response = await llama_manager.call_llama_server(payload)
+
+    # Clean and parse response content as JSON
+    raw_content = response['content'].replace('\n', '').replace('<|eot_id|>', '')
+
+    # Attempt to fix common JSON formatting issues
+    fixed_content = re.sub(r'(?<=\])(?=\s*")', ',', raw_content)  # Add missing commas between objects
+
+    try:
+        # Convert response content to JSON
+        json_response = json.loads(fixed_content)
+    except json.JSONDecodeError:
+        # Handle cases where response is not valid JSON
+        json_response = {"Error": fixed_content}
+
+    return json_response
 
 
 # Classify a given prompt

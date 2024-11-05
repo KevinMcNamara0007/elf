@@ -5,7 +5,6 @@ import httpx
 import psutil
 from src.modeling.classifier_manager import ClassifierManager
 from src.modeling.llama_server_manager import LlamaServerManager
-from src.modeling.chroma_server_manager import ChromaServerManager
 
 # Import ENV Vars
 SPLIT_SYMBOL = os.getenv("SPLIT_SYMBOL")
@@ -20,7 +19,6 @@ API_TOKENS = API_TOKENS.split(",")
 CHROMA_DATA_PATH = os.getenv("CHROMA_DATA_PATH")
 CHROMA_PORT = int(os.getenv("CHROMA_PORT", "8099"))
 
-chroma_manager = ChromaServerManager()
 llama_manager = LlamaServerManager()
 classifier_manager = ClassifierManager()
 

@@ -2,10 +2,10 @@ from fastapi import APIRouter, HTTPException, Header, Body
 from starlette import status
 from starlette.responses import StreamingResponse
 from src.authentication.authentication import verify_token
-from src.modeling.request_models import AskExpertRequest, ClassifyRequest, SemanticSearchRequest, Message, Pro
+from src.modeling.request_models import AskExpertRequest, ClassifyRequest, Message, Pro, \
+    ToolSelectRequest
 from src.services.inference import get_expert_response, prompt_classification, get_expert_response_stream, \
-    get_pro_response, get_pro_response_stream
-from src.utilities.crud import query_record
+    get_pro_response, get_pro_response_stream, tool_selection
 from src.utilities.general import NO_TOKEN
 
 inference_router = APIRouter(
@@ -79,7 +79,8 @@ async def ask_an_expert_stream(
     )
 
 
-@inference_router.post("/ask_a_pro_stream", status_code=status.HTTP_200_OK, description="Digital Professional Instructions")
+@inference_router.post("/ask_a_pro_stream", status_code=status.HTTP_200_OK,
+                       description="Digital Professional Instructions")
 async def ask_a_pro_stream(
         token: str = Header(default=NO_TOKEN, convert_underscores=False),
         request: Pro = Body(...)
@@ -141,14 +142,10 @@ async def determine_expert(
     )
 
 
-@inference_router.post("/semantic_search", status_code=status.HTTP_200_OK, description="Semantic search.")
-async def semantic_search(
+@inference_router.post("/tool_select", status_code=status.HTTP_200_OK, description="Tool Select from API doc.")
+async def tool_select(
         token: str = Header(default=NO_TOKEN, convert_underscores=False),
-        request: SemanticSearchRequest = Body(...)
+        request: ToolSelectRequest = Body(...)
 ):
     assert verify_token(token)
-    return query_record(
-        request.query,  # required prompt to query against
-        request.collection_name,   # required collection to retrieve records from
-        request.max_results  # optional max number of results to return
-    )
+    return await tool_selection(request.api_doc, request.query)

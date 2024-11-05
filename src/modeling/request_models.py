@@ -50,10 +50,9 @@ class ClassifyRequest(BaseModel):
     prompt: str
 
 
-class SemanticSearchRequest(BaseModel):
+class ToolSelectRequest(BaseModel):
+    api_doc: str
     query: str
-    collection_name: str
-    max_results: int = 5
 
 
 class Pro(BaseModel):
