@@ -124,9 +124,7 @@ async def get_pro_response_stream(prompt):
     print(f"Classification: {classifications[key]}")
     payload = STREAM_PAYLOAD
     response1 = ""
-    prompt1 = (f"Instructions: 1. For the following user ask '{prompt}', clarify the ask. "
-               f"2. List the requirements and steps needed to complete the ask fully.")
-    llama_prompt1 = f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{prompt1}<|start_header_id|>user<|end_header_id|>\n\n<|eot_id|><|start_header_id|>assistant<|end_header_id|>"
+    llama_prompt1 = f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{prompt}<|start_header_id|>user<|end_header_id|>\n\n<|eot_id|><|start_header_id|>assistant<|end_header_id|>"
     # Initial response for clarification
     payload.update(
         {"prompt": llama_prompt1}
@@ -141,26 +139,6 @@ async def get_pro_response_stream(prompt):
             content = data_dict.get('content')
             response1 += content
             print(content)
-            yield content
-        except (json.JSONDecodeError, IndexError):
-            print("Failed to parse chunk:", chunk)
-    # Update payload for final response after clarification
-    prompt2 = (
-        f"Instructions: 1. Produce a final soluton based on the requirements given without explaination. Requirements: {response1}. ")
-    llama_prompt2 = f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{prompt2}<|start_header_id|>user<|end_header_id|>\n\n<|eot_id|><|start_header_id|>assistant<|end_header_id|>"
-    payload.update(
-        {"prompt": llama_prompt2}
-    )
-
-    # Indicate end of clarification and start of final response
-    yield "\n!Final!\n"
-
-    # Stream the final response content
-    async for chunk in llama_manager.call_llama_server_stream(payload):
-        try:
-            arr = chunk.split(': ', 1)[1]
-            data_dict = json.loads(arr)
-            content = data_dict.get('content')
             yield content
         except (json.JSONDecodeError, IndexError):
             print("Failed to parse chunk:", chunk)
