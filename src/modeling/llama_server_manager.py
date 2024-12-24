@@ -8,7 +8,7 @@ import psutil
 import shutil
 
 # Environment Variables
-LLAMA_PORT = int(os.getenv("LLAMA_PORT", 8001))
+LLAMA_PORT = int(os.getenv("LLAMA_PORT", "8001"))
 GENERAL_MODEL_PATH = os.getenv("general", "efs/models/Llama-3.1.gguf")
 LLAMA_CPP_HOME = os.getenv("LLAMA_CPP_HOME", "/opt/cx_intelligence/aiaas/compiled_llama_cpp")
 LLAMA_CPP_PATH = os.path.join(LLAMA_CPP_HOME, "llama-server")
@@ -150,8 +150,8 @@ def copy_llama_binary(server_number):
     destination_path = f"efs/bin/llama-{server_number}/llama-server"
     if not os.path.exists(destination_path):
         os.makedirs(os.path.dirname(destination_path), exist_ok=True)
-        shutil.copy2(LLAMA_CPP_PATH, destination_path)
-        print(f"Copied llama-server binary to {destination_path}.")
+        return shutil.copy2(LLAMA_CPP_PATH, destination_path)
+    return destination_path
 
 
 def is_server_up(port):
@@ -205,7 +205,6 @@ class LlamaServerManager:
             "--model", GENERAL_MODEL_PATH,
             "--ctx-size", "16000",
             "--repeat-last-n", "0",
-            "--gpu-layers", gpu_layers_per_server,
             "--threads", threads_per_server,
             "--threads-batch", threads_batch_per_server,
             "--batch-size", batch_size_per_server,
@@ -215,6 +214,8 @@ class LlamaServerManager:
             "--seed", "42",
             "--special"
         ]
+        if is_cuda_available():
+            command.extend(["--gpu-layers", gpu_layers_per_server])
 
         try:
             with open(f"llama-server_{port}.log", "w") as log:
@@ -247,8 +248,8 @@ class LlamaServerManager:
 
         print("Starting servers...")
         for i in range(self.number_of_servers):
-            copy_llama_binary(i)  # Copy llama binary for each server
-            server = await self.start_server(f"efs/bin/llama-{i}/llama-server", self.ports[i])
+            binary_path = copy_llama_binary(i)  # Copy llama binary for each server
+            server = await self.start_server(binary_path, self.ports[i])
             if server:
                 # Health checks
                 for attempt in range(5):

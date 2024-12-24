@@ -8,9 +8,12 @@ FROM ${IMAGE} AS base
 FROM --platform=linux/amd64 python:3.11-slim AS app
 
 # Install git and cmake dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update &&  \
+    apt-get install -y \
+    build-essential \
     git \
     cmake \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Set environment variables for the directory paths
@@ -25,6 +28,7 @@ WORKDIR /app
 
 # Copy the llama-server binary and shared libraries into the specific directory
 COPY --from=base /app/llama-server ${LLAMA_CPP_HOME}
+COPY --from=base /app/lib* ${LLAMA_CPP_HOME}
 
 # Install runtime Python dependencies
 COPY requirements.txt requirements.txt
