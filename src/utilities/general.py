@@ -3,20 +3,23 @@ import platform
 import time
 import httpx
 import psutil
+from dotenv import load_dotenv
+
 from src.modeling.classifier_manager import ClassifierManager
 from src.modeling.llama_server_manager import LlamaServerManager
 
 # Import ENV Vars
-SPLIT_SYMBOL = os.getenv("SPLIT_SYMBOL")
-classifier_tokenizer = os.getenv("classifier_tokenizer")
-classifier_model = os.getenv("classifier_model")
+load_dotenv("config/.env-dev")
+SPLIT_SYMBOL = os.getenv("SPLIT_SYMBOL", ":::")
+classifier_tokenizer = os.getenv("classifier_tokenizer", "efs/classifier/tokenizer.pickle")
+classifier_model = os.getenv("classifier_model", "efs/classifer/KM_Classifier.onnx")
 LLAMA_PORT = os.getenv("LLAMA_PORT", "8001")
 PLATFORM = platform.system()
-GPU_LAYERS = int(os.getenv("GPU_LAYERS"))
-API_TOKENS = os.getenv("API_TOKENS")
+GPU_LAYERS = int(os.getenv("GPU_LAYERS", "99"))
+API_TOKENS = os.getenv("API_TOKENS", "nfaiwune2iun3onrofni2n3o1n,134921ur81298n2309n")
 NO_TOKEN = "No Token was provided."
 API_TOKENS = API_TOKENS.split(",")
-CHROMA_DATA_PATH = os.getenv("CHROMA_DATA_PATH")
+CHROMA_DATA_PATH = os.getenv("CHROMA_DATA_PATH", "efs/chroma_data")
 CHROMA_PORT = int(os.getenv("CHROMA_PORT", "8099"))
 
 llama_manager = LlamaServerManager()
@@ -124,6 +127,3 @@ def stop_aux_servers():
     # Kill ChromaDB server
     kill_process_on_port(chroma_port)
     print(f"Killed ChromaDB server on port {chroma_port}")
-
-    # Add logic to kill any additional auxiliary servers (e.g., classifier) if needed
-    # If there is a known port for the classifier, kill it here

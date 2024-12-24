@@ -11,7 +11,7 @@ import shutil
 LLAMA_PORT = int(os.getenv("LLAMA_PORT", 8001))
 GENERAL_MODEL_PATH = os.getenv("general", "efs/models/Llama-3.1.gguf")
 LLAMA_CPP_HOME = os.getenv("LLAMA_CPP_HOME", "/opt/cx_intelligence/aiaas/compiled_llama_cpp")
-LLAMA_CPP_PATH = os.path.join(LLAMA_CPP_HOME, "bin/llama-server")
+LLAMA_CPP_PATH = os.path.join(LLAMA_CPP_HOME, "llama-server")
 LLAMA_SOURCE_FOLDER = os.getenv("LLAMA_SOURCE_FOLDER", "efs/frameworks/llama.cpp")
 HOST = os.getenv("HOST", "0.0.0.0")
 GPU_LAYERS = int(os.getenv("GPU_LAYERS", "99"))
