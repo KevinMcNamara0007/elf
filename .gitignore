@@ -1,4 +1,6 @@
 /elf/efs
 efs/models
+efs/bin
+efs/frameworks/llama.cpp
 .idea
 config

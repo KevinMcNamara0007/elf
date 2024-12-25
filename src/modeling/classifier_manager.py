@@ -1,6 +1,5 @@
 import os
 import pickle
-import onnxruntime as ort
 
 
 class ClassifierManager:
@@ -13,6 +12,7 @@ class ClassifierManager:
         Starts the ONNX classifier model with the loaded tokenizer
         :return:
         """
+        import onnxruntime as ort
         try:
             with open(os.getenv("classifier_tokenizer"), 'rb') as handle:
                 self.tokenizer = pickle.load(handle)

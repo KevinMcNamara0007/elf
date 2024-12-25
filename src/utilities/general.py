@@ -99,7 +99,7 @@ async def start_aux_servers():
     Starts auxiliary servers for ChromaDB, llama, and classifier managers.
     Returns the initialized server managers.
     """
-    global chroma_manager, llama_manager, classifier_manager
+    global llama_manager, classifier_manager
 
     # Spin up the servers
     await llama_manager.spin_up_servers()
@@ -116,14 +116,9 @@ def stop_aux_servers():
     # Get the number of servers and ports from environment variables
     llama_port = int(os.getenv("LLAMA_PORT", 8001))
     number_of_servers = int(os.getenv('NUMBER_OF_SERVERS', 1))
-    chroma_port = int(os.getenv("CHROMA_PORT", 8500))
 
     # Kill llama servers
     for i in range(number_of_servers):
         port_to_kill = llama_port + i
         kill_process_on_port(port_to_kill)
         print(f"Killed llama-server on port {port_to_kill}")
-
-    # Kill ChromaDB server
-    kill_process_on_port(chroma_port)
-    print(f"Killed ChromaDB server on port {chroma_port}")

@@ -3,6 +3,8 @@ import platform
 import subprocess
 import threading
 import asyncio
+import time
+
 import httpx
 import psutil
 import shutil
@@ -10,7 +12,7 @@ import shutil
 # Environment Variables
 LLAMA_PORT = int(os.getenv("LLAMA_PORT", "8001"))
 GENERAL_MODEL_PATH = os.getenv("general", "efs/models/Llama-3.1.gguf")
-LLAMA_CPP_HOME = os.getenv("LLAMA_CPP_HOME", "/opt/cx_intelligence/aiaas/compiled_llama_cpp")
+LLAMA_CPP_HOME = os.getenv("LLAMA_CPP_HOME", "efs/bin")
 LLAMA_CPP_PATH = os.path.join(LLAMA_CPP_HOME, "llama-server")
 LLAMA_SOURCE_FOLDER = os.getenv("LLAMA_SOURCE_FOLDER", "efs/frameworks/llama.cpp")
 HOST = os.getenv("HOST", "0.0.0.0")
@@ -24,13 +26,24 @@ WORKERS = "-j4"  # Setting it to use 4 workers for compilation
 LLAMA_REPO_URL = "https://github.com/ggerganov/llama.cpp.git"  # The URL to the llama.cpp repository
 
 
-def check_possible_paths():
+def check_possible_paths(bin_check=False):
     """
     Check if the llama-server binary exists in possible paths.
     """
-    if os.path.exists(LLAMA_CPP_PATH):
-        return LLAMA_CPP_PATH
-    return ""
+    if not bin_check:
+        if os.path.exists(LLAMA_CPP_PATH):
+            return LLAMA_CPP_PATH
+        elif os.path.exists(LLAMA_CPP_PATH + ".exe"):
+            return LLAMA_CPP_PATH + ".exe"
+        else:
+            return check_possible_paths(bin_check=True)
+    else:
+        if os.path.exists(os.path.join(LLAMA_CPP_HOME, "bin", "Release", "llama-server")):
+            return os.path.join(LLAMA_CPP_HOME, "bin", "Release", "llama-server")
+        elif os.path.exists(os.path.join(LLAMA_CPP_HOME, "bin", "Release", "llama-server.exe")):
+            return os.path.join(LLAMA_CPP_HOME, "bin", "Release", "llama-server.exe")
+        else:
+            return ""
 
 
 def remove_directory(directory):
@@ -48,7 +61,7 @@ def is_cuda_available():
     try:
         result = subprocess.run(["nvcc", "--version"], check=True, capture_output=True)
         return "Cuda compilation tools" in result.stdout.decode()
-    except FileNotFoundError:
+    except Exception:
         return False
 
 
@@ -71,12 +84,26 @@ def clone_llama_cpp_repo():
             raise e
 
 
+# Function to check if Git is installed
+def is_git_installed():
+    try:
+        subprocess.run(["git", "--version"], check=True, capture_output=True, text=True)
+        return True
+    except subprocess.CalledProcessError:
+        return False
+
 def compile_llama_cpp():
     """
     Compiles the llama-server using CMake and GPU acceleration (if available).
+    Checks if Git is installed before proceeding with the build.
     """
     global LLAMA_CPP_PATH
     LLAMA_CPP_PATH = check_possible_paths()
+
+    # Check if Git is installed
+    if not is_git_installed():
+        print("Error: Git is not installed. Please install Git to proceed.")
+        exit(1)
 
     if LLAMA_CPP_PATH == "":
         # Clone the repo if necessary
@@ -85,35 +112,46 @@ def compile_llama_cpp():
         # Remove any existing directory and create a clean one
         remove_directory(LLAMA_CPP_HOME)
         os.makedirs(LLAMA_CPP_HOME, exist_ok=True)
-        os.chdir(LLAMA_CPP_HOME)
+        project_root = os.getcwd()
 
         # Determine the correct GPU flag based on the system
-        gpu_flag = ""
         if is_cuda_available():
             gpu_flag = "-DGGML_CUDA=ON"
         elif platform.system() == "Darwin":
             gpu_flag = "-DGGML_METAL=ON"
+        else:
+            gpu_flag = "-DGGML_BLAS=ON"
 
         try:
             # Configure CMake with the correct GPU support
-            print("Configuring CMake...")
+            cmake_config_command = ["cmake", "-B", LLAMA_CPP_HOME, "-S", LLAMA_SOURCE_FOLDER, gpu_flag]
             source_command = subprocess.run(
-                ["cmake", "-B", ".", "-S", LLAMA_SOURCE_FOLDER, gpu_flag],
+                cmake_config_command,
                 check=True,
                 capture_output=True,
+                text=True,
             )
-            print(source_command.stdout.decode())
-            print(source_command.stderr.decode())
+            # Print both stdout and stderr from the CMake config step
+            print("CMake config output:")
+            print(source_command.stdout)
+            if source_command.stderr:
+                print("CMake config errors:")
+                print(source_command.stderr)
 
             # Build llama-server target
             print("Building llama-server...")
             build_command = subprocess.run(
-                ["cmake", "--build", ".", "--config", "Release", "--target", "llama-server", WORKERS],
+                ["cmake", "--build", LLAMA_CPP_HOME, "--config", "Release", "--target", "llama-server", WORKERS],
                 check=True,
                 capture_output=True,
+                text=True
             )
-            print(build_command.stdout.decode())
-            print(build_command.stderr.decode())
+            # Print both stdout and stderr from the build step
+            print("Build output:")
+            print(build_command.stdout)
+            if build_command.stderr:
+                print("Build errors:")
+                print(build_command.stderr)
 
             # After compiling, check if the binary exists
             LLAMA_CPP_PATH = check_possible_paths()
@@ -122,6 +160,10 @@ def compile_llama_cpp():
 
         except subprocess.CalledProcessError as e:
             print(f"Error during CMake or build process: {e}")
+            print("Command that failed:", e.cmd)
+            print("Error code:", e.returncode)
+            print("Standard output:", e.stdout if e.stdout else "None")
+            print("Standard error:", e.stderr if e.stderr else "None")
             exit(1)
 
 
@@ -144,14 +186,39 @@ def kill_process_on_port(port):
 
 def copy_llama_binary(server_number):
     """
-    Copy the llama-server binary to the specified path.
+    Copy the llama-server binary folder to the specified path (not including the folder itself).
     """
+    # Get the directory of the LLAMA_CPP_PATH (this should be a folder path)
+    bin_folder = os.path.dirname(LLAMA_CPP_PATH)
+    torn_path = os.path.split(LLAMA_CPP_PATH)
+    # Define the destination path
+    destination_path = os.path.join("efs", "servers", "llama-" + str(server_number) + "/")
 
-    destination_path = f"efs/bin/llama-{server_number}/llama-server"
+    # Ensure the destination directory exists
     if not os.path.exists(destination_path):
-        os.makedirs(os.path.dirname(destination_path), exist_ok=True)
-        return shutil.copy2(LLAMA_CPP_PATH, destination_path)
-    return destination_path
+        os.makedirs(destination_path, exist_ok=True)
+
+    # Copy the entire folder's contents (not the folder itself)
+    try:
+        # Copy everything in torn_path to destination_path
+        for item in os.listdir(bin_folder):
+            source_item = os.path.join(bin_folder, item)
+            destination_item = os.path.join(destination_path, item)
+
+            # If it's a file, copy it
+            if os.path.isfile(source_item):
+                shutil.copy2(source_item, destination_item)
+            # If it's a directory, copy recursively
+            elif os.path.isdir(source_item):
+                shutil.copytree(source_item, destination_item)
+
+        print(f"Successfully copied the folder contents to {destination_path}")
+    except Exception as e:
+        print(f"Error copying folder contents: {e}")
+        return None
+
+    # Return the path to the copied contents
+    return destination_path + torn_path[-1]
 
 
 def is_server_up(port):
@@ -197,6 +264,8 @@ class LlamaServerManager:
         ubatch_size_per_server = str(max(1, TOTAL_UBATCH_SIZE // self.number_of_servers))
         threads_per_server = str(max(1, NUMBER_OF_CORES // self.number_of_servers))
         threads_batch_per_server = str(max(1, TOTAL_THREADS_BATCH // self.number_of_servers))
+        if not os.path.exists(GENERAL_MODEL_PATH):
+            raise Exception(f"General model file {GENERAL_MODEL_PATH} does not exist.")
 
         command = [
             path,
@@ -210,26 +279,23 @@ class LlamaServerManager:
             "--batch-size", batch_size_per_server,
             "--ubatch-size", ubatch_size_per_server,
             "--dump-kv-cache",
-            "--penalize-nl",
             "--seed", "42",
-            "--special"
         ]
         if is_cuda_available():
             command.extend(["--gpu-layers", gpu_layers_per_server])
-
         try:
             with open(f"llama-server_{port}.log", "w") as log:
                 server_process = subprocess.Popen(
                     command,
                     stdout=log,
-                    stderr=log
+                    stderr=log,
+                    text=True,
                 )
-            await asyncio.sleep(3)  # Simulate time taken to start the server
+            time.sleep(3)
             print(f"Server started on port {port}")
 
             # Store the command for future use
             self.server_commands.append(command)
-
             return server_process
         except Exception as e:
             print(f"Failed to start server on port {port}: {e}")
@@ -242,6 +308,21 @@ class LlamaServerManager:
         print("Killing any existing processes on configured ports...")
         for port in self.ports:
             kill_process_on_port(port)
+
+        # Check and install appropriate ONNXRuntime packages
+        print("Checking ONNXRuntime installations...")
+        try:
+            if is_cuda_available():
+                # Install ONNXRuntime-GPU and ONNXRuntime-GenAI-CUDA if CUDA is available
+                subprocess.run(["pip", "install", "--upgrade", "onnxruntime-gpu", "onnxruntime-genai-cuda"], check=True)
+                print("Installed onnxruntime-gpu and onnxruntime-genai-cuda.")
+            else:
+                # Install standard ONNXRuntime and ONNXRuntime-GenAI otherwise
+                subprocess.run(["pip", "install", "--upgrade", "onnxruntime", "onnxruntime-genai"], check=True)
+                print("Installed onnxruntime and onnxruntime-genai.")
+        except subprocess.CalledProcessError as e:
+            print(f"Failed to install ONNXRuntime packages: {e}")
+            raise e
 
         print("Checking if llama-server needs compilation...")
         compile_llama_cpp()

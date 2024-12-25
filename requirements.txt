@@ -15,3 +15,5 @@ psutil~=6.0.0
 onnx~=1.16.1
 httpx
 dotenv-python
+keras==2.15.0
+tensorflow==2.15.0
