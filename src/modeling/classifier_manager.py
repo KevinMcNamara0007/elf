@@ -17,8 +17,7 @@ class ClassifierManager:
             with open(os.getenv("classifier_tokenizer"), 'rb') as handle:
                 self.tokenizer = pickle.load(handle)
             self.classifier = ort.InferenceSession(os.getenv("classifier_model"),
-                                                   providers=['CUDAExecutionProvider', 'CoreMLExecutionProvider',
-                                                              'CPUExecutionProvider'])
+                                                   providers=ort.get_available_providers())
             print("Classifier model loaded.")
         except Exception as e:
             print(f'Failed to load classifier model {e}')

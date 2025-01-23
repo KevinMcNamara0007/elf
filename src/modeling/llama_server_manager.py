@@ -1,10 +1,8 @@
 import os
-import platform
 import subprocess
 import threading
 import asyncio
 import time
-
 import httpx
 import psutil
 import shutil
@@ -16,7 +14,7 @@ LLAMA_CPP_HOME = os.getenv("LLAMA_CPP_HOME", "efs/bin")
 LLAMA_CPP_PATH = os.path.join(LLAMA_CPP_HOME, "llama-server")
 LLAMA_SOURCE_FOLDER = os.getenv("LLAMA_SOURCE_FOLDER", "efs/frameworks/llama.cpp")
 HOST = os.getenv("HOST", "0.0.0.0")
-GPU_LAYERS = int(os.getenv("GPU_LAYERS", "99"))
+GPU_LAYERS = int(os.getenv("GPU_LAYERS", "0"))
 NUMBER_OF_CORES = os.cpu_count()
 TOTAL_BATCH_SIZE = int(os.getenv("TOTAL_BATCH_SIZE", "8196"))
 TOTAL_UBATCH_SIZE = int(os.getenv("TOTAL_UBATCH_SIZE", "2048"))
@@ -35,6 +33,8 @@ def check_possible_paths(bin_check=False):
             return LLAMA_CPP_PATH
         elif os.path.exists(LLAMA_CPP_PATH + ".exe"):
             return LLAMA_CPP_PATH + ".exe"
+        elif os.path.exists(os.path.join(LLAMA_CPP_HOME, "llama-server")):
+            return os.path.join(LLAMA_CPP_HOME, "llama-server")
         else:
             return check_possible_paths(bin_check=True)
     else:
@@ -42,6 +42,8 @@ def check_possible_paths(bin_check=False):
             return os.path.join(LLAMA_CPP_HOME, "bin", "Release", "llama-server")
         elif os.path.exists(os.path.join(LLAMA_CPP_HOME, "bin", "Release", "llama-server.exe")):
             return os.path.join(LLAMA_CPP_HOME, "bin", "Release", "llama-server.exe")
+        elif os.path.exists(os.path.join(LLAMA_CPP_HOME, "bin", "llama-server")):
+            return os.path.join(LLAMA_CPP_HOME, "bin", "llama-server")
         else:
             return ""
 
@@ -106,10 +108,12 @@ def compile_llama_cpp():
         exit(1)
 
     if LLAMA_CPP_PATH == "":
+        # Remove any existing directory
+        remove_directory(LLAMA_CPP_HOME)
         # Clone the repo if necessary
         clone_llama_cpp_repo()
 
-        # Remove any existing directory and create a clean one
+        # Create a clean one
         remove_directory(LLAMA_CPP_HOME)
         os.makedirs(LLAMA_CPP_HOME, exist_ok=True)
         project_root = os.getcwd()
@@ -117,8 +121,6 @@ def compile_llama_cpp():
         # Determine the correct GPU flag based on the system
         if is_cuda_available():
             gpu_flag = "-DGGML_CUDA=ON"
-        elif platform.system() == "Darwin":
-            gpu_flag = "-DGGML_METAL=ON"
         else:
             gpu_flag = "-DGGML_BLAS=ON"
 
@@ -283,6 +285,7 @@ class LlamaServerManager:
         ]
         if is_cuda_available():
             command.extend(["--gpu-layers", gpu_layers_per_server])
+        print(command)
         try:
             with open(f"llama-server_{port}.log", "w") as log:
                 server_process = subprocess.Popen(
@@ -326,7 +329,9 @@ class LlamaServerManager:
 
         print("Checking if llama-server needs compilation...")
         compile_llama_cpp()
-
+        x = 1
+        print(f"llama-server compilation complete. Sleeping for {x} seconds...")
+        time.sleep(x)
         print("Starting servers...")
         for i in range(self.number_of_servers):
             binary_path = copy_llama_binary(i)  # Copy llama binary for each server
